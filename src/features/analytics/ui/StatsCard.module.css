@@ -1,0 +1,182 @@
+/* =============================================================================
+   features/analytics/ui/StatsCard.module.css
+   ============================================================================= */
+
+/* Grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* Card base */
+.card {
+  animation: statCardIn var(--duration-slow) var(--ease-spring) both;
+  transition:
+    transform var(--duration-base) var(--ease-spring),
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+/* Content layout */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5) !important;
+}
+
+@media (max-width: 640px) {
+  .content {
+    padding: var(--space-4) !important;
+    gap: var(--space-2);
+  }
+}
+
+/* Icon badge */
+.iconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+/* Value row */
+.valueRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  line-height: 1;
+}
+
+.value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+}
+
+@media (max-width: 640px) {
+  .value {
+    font-size: var(--font-size-xl);
+  }
+}
+
+.unit {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Meta row */
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.trendUp {
+  color: var(--color-accent-emerald);
+}
+.trendDown {
+  color: var(--color-accent-rose);
+}
+.trendNeutral {
+  color: var(--color-text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Variant color overrides (icon badge + hover border/glow)
+   --------------------------------------------------------------------------- */
+.variantPrimary .iconWrap,
+.variantPrimary.iconWrap {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+}
+.variantPrimary:hover {
+  border-color: var(--color-border-accent);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+.variantAmber .iconWrap,
+.variantAmber.iconWrap {
+  background: var(--color-accent-amber-muted);
+  color: var(--color-accent-amber);
+}
+.variantAmber:hover {
+  border-color: rgba(245, 166, 35, 0.4);
+  box-shadow: var(--shadow-glow-amber);
+}
+
+.variantEmerald .iconWrap,
+.variantEmerald.iconWrap {
+  background: var(--color-accent-emerald-muted);
+  color: var(--color-accent-emerald);
+}
+.variantEmerald:hover {
+  border-color: rgba(34, 197, 94, 0.35);
+  box-shadow: var(--shadow-glow-emerald);
+}
+
+.variantViolet .iconWrap,
+.variantViolet.iconWrap {
+  background: var(--color-accent-violet-muted);
+  color: var(--color-accent-violet);
+}
+.variantViolet:hover {
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+}
+
+/* Entrance animation */
+@keyframes statCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

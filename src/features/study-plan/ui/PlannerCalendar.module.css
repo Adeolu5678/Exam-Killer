@@ -1,0 +1,531 @@
+/* =============================================================================
+   features/study-plan/ui/PlannerCalendar.module.css
+   8-Point Grid throughout. Generous whitespace as per Blueprint.
+   ============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   Root
+   --------------------------------------------------------------------------- */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .root {
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Toolbar
+   --------------------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.navGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.currentPeriod {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+  min-width: 220px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .currentPeriod {
+    min-width: unset;
+    flex: 1;
+    font-size: var(--font-size-base);
+  }
+  .navBtn {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+.navBtn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.navBtn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-accent);
+  color: var(--color-text-primary);
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.todayBtn {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.todayBtn:hover {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  border-color: var(--color-border-accent);
+}
+
+/* View toggle pill group */
+.viewToggle {
+  display: flex;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.viewToggleBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-3);
+  border-radius: calc(var(--radius-md) - 2px);
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+  background: transparent;
+}
+
+.viewToggleBtn[data-active='true'] {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Add session button */
+.addSessionBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-primary-muted);
+  border: 1px solid rgba(61, 123, 245, 0.25);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.addSessionBtn:hover {
+  background: rgba(61, 123, 245, 0.2);
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
+/* ---------------------------------------------------------------------------
+   Month View
+   --------------------------------------------------------------------------- */
+
+.monthGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.dayHeaderRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: var(--color-bg-surface);
+}
+
+.dayHeader {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-2) 0;
+}
+
+.monthGridRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--color-border);
+}
+
+/* Calendar cell */
+.calendarCell {
+  background: var(--color-bg-elevated);
+  min-height: 96px;
+  padding: var(--space-2);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+@media (max-width: 768px) {
+  .calendarCell {
+    min-height: 64px;
+    padding: var(--space-1);
+  }
+}
+
+.calendarCell:hover {
+  background: var(--color-bg-surface);
+}
+
+.calendarCell[data-today='true'] {
+  background: var(--color-primary-muted);
+}
+
+.calendarCell[data-other-month='true'] {
+  background: var(--color-bg-base);
+  opacity: 0.5;
+}
+
+.cellHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.cellDate {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+@media (max-width: 640px) {
+  .cellDate {
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+  }
+}
+
+.calendarCell[data-today='true'] .cellDate {
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.todayDot {
+  display: none; /* handled via .cellDate background */
+}
+
+.cellAddBtn {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast),
+    background var(--duration-fast);
+  cursor: pointer;
+}
+
+.calendarCell:hover .cellAddBtn {
+  opacity: 1;
+  background: var(--color-bg-surface);
+}
+
+.cellAddBtn:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-muted) !important;
+}
+
+.cellSessions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+/* Session pill */
+.sessionPill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 2px var(--space-1);
+  background: var(--pill-bg, var(--color-bg-surface));
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: left;
+  transition: opacity var(--duration-fast);
+}
+
+.sessionPill:hover {
+  opacity: 0.85;
+}
+
+.sessionPill[data-status='completed'] {
+  opacity: 0.5;
+}
+
+.pillDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  border-radius: var(--radius-full);
+  background: var(--pill-color, var(--color-primary));
+}
+
+.pillText {
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  color: var(--pill-color, var(--color-primary));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.2;
+}
+
+.overflowBadge {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  padding: 1px var(--space-1);
+}
+
+/* ---------------------------------------------------------------------------
+   Week View
+   --------------------------------------------------------------------------- */
+
+.weekRow {
+  display: grid;
+  grid-template-columns: 52px repeat(7, 1fr);
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+@media (max-width: 800px) {
+  .weekRow {
+    grid-template-columns: 44px repeat(7, minmax(110px, 1fr));
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Optional: hide some labels on very small screens to save vertical space if needed */
+}
+
+.weekTimeRuler {
+  background: var(--color-bg-surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.weekTimeSlot {
+  height: 40px;
+  display: flex;
+  align-items: flex-start;
+  padding: var(--space-1) var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.weekTimeLabel {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.weekDayColumn {
+  background: var(--color-bg-elevated);
+  display: flex;
+  flex-direction: column;
+  transition: background var(--duration-fast);
+}
+
+.weekDayColumn[data-today='true'] {
+  background: var(--color-primary-muted);
+}
+
+.weekDayHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  background: inherit;
+  z-index: 1;
+}
+
+.weekDayName {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.weekDayNum {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
+}
+
+.weekDayNum[data-today='true'] {
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
+}
+
+.weekDayNum:hover:not([data-today='true']) {
+  background: var(--color-bg-surface);
+}
+
+.weekDaySessions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.weekAddPlaceholder {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+  background: none;
+}
+
+.weekDayColumn:hover .weekAddPlaceholder {
+  opacity: 1;
+}
+
+.weekAddPlaceholder:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+}
+
+.weekSessionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-2);
+  background: var(--block-bg, var(--color-bg-surface));
+  border-left: 3px solid var(--block-color, var(--color-primary));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.weekSessionBlock:hover {
+  opacity: 0.85;
+}
+
+.weekSessionBlock[data-status='completed'] {
+  opacity: 0.45;
+}
+
+.weekBlockTitle {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--block-color, var(--color-primary));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weekBlockTime {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}

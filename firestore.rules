@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isWorkspaceOwner(workspaceData) {
+      return isAuthenticated() && workspaceData.user_id == request.auth.uid;
+    }
+    
+    function isWorkspaceMember(workspaceId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/workspace_members/$(request.auth.uid + '_' + workspaceId));
+    }
+    
+    function isWorkspaceAdminOrOwner(workspaceId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/workspace_members/$(request.auth.uid + '_' + workspaceId)) &&
+        (get(/databases/$(database)/documents/workspace_members/$(request.auth.uid + '_' + workspaceId)).data.role == 'owner' || 
+         get(/databases/$(database)/documents/workspace_members/$(request.auth.uid + '_' + workspaceId)).data.role == 'admin');
+    }
+    
+    // Users collection - users can read/write their own data
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+    
+    // Workspaces - owner has full access, members have limited access
+    match /workspaces/{workspaceId} {
+      allow read: if isAuthenticated() && (
+        resource == null || 
+        resource.data.user_id == request.auth.uid ||
+        isWorkspaceMember(workspaceId)
+      );
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isWorkspaceOwner(resource.data);
+    }
+    
+    // Workspace members
+    match /workspace_members/{memberId} {
+      allow read: if isAuthenticated() && memberId.split('_')[0] == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.user_id;
+    }
+    
+    // Workspace invites
+    match /workspace_invites/{inviteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    
+    // Sources - workspace-related
+    match /sources/{sourceId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isWorkspaceMember(resource.data.workspace_id)
+      );
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Flashcards - workspace-related
+    match /flashcards/{flashcardId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isWorkspaceMember(resource.data.workspace_id)
+      );
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Quizzes - workspace-related
+    match /quizzes/{quizId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isWorkspaceMember(resource.data.workspace_id)
+      );
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Exams - workspace-related
+    match /exams/{examId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isWorkspaceMember(resource.data.workspace_id)
+      );
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Study plans - user owns their own
+    match /study_plans/{planId} {
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // User progress - user owns their own
+    match /user_progress/{progressId} {
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Vector chunks - read-only for RAG, owned by workspace
+    match /vector_chunks/{chunkId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isWorkspaceMember(resource.data.workspace_id)
+      );
+      // AI systems write via admin SDK (server-side), so no client write rules needed
+    }
+  }
+}

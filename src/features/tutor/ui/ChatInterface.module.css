@@ -1,0 +1,390 @@
+/* =============================================================================
+   features/tutor/ui/ChatInterface.module.css
+   Layer: features → tutor → ui
+   Purpose: Layout, surface, and micro-interaction styles for the chat shell.
+   All color values reference CSS custom properties from styles/globals.css.
+   ============================================================================= */
+
+/* ── Shell layout ─────────────────────────────────────────────────────────── */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0; /* allow flex child to shrink within parent */
+  background: var(--color-bg-base);
+  overflow: hidden;
+}
+
+/* ── Header bar ───────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .header {
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.headerLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .headerLabel {
+    display: none;
+  }
+}
+
+.personalityRow {
+  flex: 1;
+  overflow-x: auto;
+}
+
+/* Hide horizontal scrollbar in personality row */
+.personalityRow::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Sources panel toggle ─────────────────────────────────────────────────── */
+.panelToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-body);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.panelToggle:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-accent);
+}
+
+.panelToggleLabel {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .panelToggleLabel {
+    display: inline;
+  }
+}
+
+/* ── Content row ──────────────────────────────────────────────────────────── */
+.content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Message area ─────────────────────────────────────────────────────────── */
+.messageArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  scroll-behavior: smooth;
+  min-width: 0;
+}
+
+/* ── Sources panel ────────────────────────────────────────────────────────── */
+.sourcesPanel {
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+@media (max-width: 1023px) {
+  .sourcesPanel {
+    position: fixed;
+    top: var(--topbar-height);
+    bottom: 0;
+    right: 0;
+    border-left: 1px solid var(--color-border);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
+  }
+}
+
+.sourcesPanelInner {
+  width: 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (max-width: 480px) {
+  .sourcesPanelInner {
+    width: calc(100vw - 48px);
+  }
+}
+
+.sourcesPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  transition: all var(--duration-fast) var(--ease-standard);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.actionBtn:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.sourcesScrollArea {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.sourcesEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.sourcesEmpty p {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-relaxed);
+  max-width: 20ch;
+}
+
+/* ── Input bar (sticky footer) ────────────────────────────────────────────── */
+.inputBar {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+@media (max-width: 767px) {
+  .inputBar {
+    padding: var(--space-3) var(--space-3);
+  }
+}
+
+.inputWrap {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-3);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.inputWrap:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
+}
+
+.textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  min-height: 24px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sendBtn {
+  flex-shrink: 0;
+}
+
+/* Streaming indicator dot */
+.streamDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+/* ── Hint row ─────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .hint {
+    display: none;
+  }
+}
+
+.hint kbd {
+  display: inline-block;
+  padding: 0 4px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-4);
+  flex: 1;
+  padding: var(--space-8);
+  min-height: 340px;
+}
+
+.emptySvg {
+  flex-shrink: 0;
+}
+
+.emptyTitle {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.emptySubtitle {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  max-width: 48ch;
+  line-height: var(--line-height-relaxed);
+}
+
+/* ── Suggestion chips ─────────────────────────────────────────────────────── */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  max-width: 520px;
+}
+
+.suggestionChip {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.suggestionChip:hover {
+  background: var(--color-primary-muted);
+  border-color: var(--color-border-accent);
+  color: var(--color-primary);
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────────── */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+
+/* Blink is used by MessageBubble for the streaming cursor */
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}

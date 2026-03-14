@@ -1,0 +1,259 @@
+/* =============================================================================
+   FlashCardDeck.module.css
+   ============================================================================= */
+
+/* ── Root ────────────────────────────────────────────────────────────────────── */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ── Stats bar ───────────────────────────────────────────────────────────────── */
+.statsBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* ── Stat chip ───────────────────────────────────────────────────────────────── */
+.statChip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.statChip[data-color='primary'] {
+  color: var(--color-primary);
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-muted);
+}
+
+.statChip[data-color='amber'] {
+  color: var(--color-accent-amber);
+  border-color: var(--color-accent-amber-muted);
+  background: var(--color-accent-amber-muted);
+}
+
+/* ── Mastery legend ──────────────────────────────────────────────────────────── */
+.masteryBreakdown {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.masteryLegendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.masteryLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .reviewBtn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.addBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.addBtn:hover {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-accent);
+  color: var(--color-text-primary);
+}
+
+.reviewBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-spring);
+}
+
+.reviewBtn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.reviewBtn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.reviewBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Mastery gradient bar ────────────────────────────────────────────────────── */
+.masteryBar {
+  display: flex;
+  height: 6px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-bg-surface);
+}
+
+.masterySegment {
+  height: 100%;
+  transition: width 0.6s var(--ease-standard);
+}
+
+.masterySegment[data-tier='new'] {
+  background: var(--color-text-muted);
+}
+.masterySegment[data-tier='learning'] {
+  background: var(--color-accent-rose);
+}
+.masterySegment[data-tier='familiar'] {
+  background: var(--color-accent-amber);
+}
+.masterySegment[data-tier='mastered'] {
+  background: var(--color-accent-emerald);
+}
+
+/* ── Card list ───────────────────────────────────────────────────────────────── */
+.cardList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── Virtual container ───────────────────────────────────────────────────────── */
+.virtualContainer {
+  height: 480px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Deck row card ───────────────────────────────────────────────────────────── */
+.deckRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+}
+
+.masteryDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background var(--duration-base) var(--ease-standard);
+}
+
+.rowFront {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: none;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-8);
+}
+
+.emptyIllustration {
+  margin-bottom: var(--space-2);
+  opacity: 0.8;
+}
+
+.emptyTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+.emptySub {
+  color: var(--color-text-secondary);
+  max-width: 38ch;
+  font-size: var(--font-size-sm);
+}
+
+/* ── Error state ─────────────────────────────────────────────────────────────── */
+.errorState {
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.errorText {
+  color: var(--color-accent-rose);
+  font-size: var(--font-size-sm);
+}

@@ -1,0 +1,219 @@
+/* =============================================================================
+   widgets/CommandPalette/CommandPalette.module.css
+   Glassmorphism command palette — dark-mode design tokens only.
+   Blueprint: §1.1 dark-first, §1.4 motion tokens.
+   ============================================================================= */
+
+/* ── Backdrop overlay ───────────────────────────────────────────────────── */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(8, 11, 18, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: clamp(5rem, 12vh, 9rem);
+}
+
+/* ── Dialog container (glassmorphism surface) ───────────────────────────── */
+.dialog {
+  width: min(640px, calc(100vw - 2rem));
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-accent);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 40px rgba(61, 123, 245, 0.12);
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Search input row ───────────────────────────────────────────────────── */
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  caret-color: var(--color-primary);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.kbdHint {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1em 0.5em;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+/* ── Scrollable results list ────────────────────────────────────────────── */
+.list {
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+  overscroll-behavior: contain;
+}
+
+/* ── Group heading ──────────────────────────────────────────────────────── */
+.groupHeading {
+  padding: var(--space-2) var(--space-4) var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Group separator */
+.groupSeparator {
+  height: 1px;
+  margin: var(--space-2) 0;
+  background: var(--color-border);
+}
+
+/* ── Individual command item ─────────────────────────────────────────────── */
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  margin: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+  outline: none;
+}
+
+/* cmdk sets data-selected on the highlighted item */
+.item[data-selected='true'],
+.item[aria-selected='true'] {
+  background: var(--color-bg-surface);
+}
+
+.item[data-selected='true'] .itemLabel,
+.item[aria-selected='true'] .itemLabel {
+  color: var(--color-text-primary);
+}
+
+.item[data-selected='true'] .iconWrap,
+.item[aria-selected='true'] .iconWrap {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+}
+
+/* ── Icon badge ─────────────────────────────────────────────────────────── */
+.iconWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+/* ── Item text ──────────────────────────────────────────────────────────── */
+.itemContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.itemLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.itemDescription {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* ── Enter hint on selected item ────────────────────────────────────────── */
+.itemEnterHint {
+  flex-shrink: 0;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.item[data-selected='true'] .itemEnterHint,
+.item[aria-selected='true'] .itemEnterHint {
+  display: flex;
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.empty {
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* ── Footer hint bar ────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.footerHint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}

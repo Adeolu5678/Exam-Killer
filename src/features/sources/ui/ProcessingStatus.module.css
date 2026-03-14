@@ -1,0 +1,128 @@
+/* =============================================================================
+   features/sources/ui/ProcessingStatus.module.css
+   ============================================================================= */
+
+/* --- Container --- */
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* --- Pipeline steps row --- */
+.pipeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* --- Individual step --- */
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  position: relative;
+}
+
+.stepDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-border);
+  flex-shrink: 0;
+  transition:
+    background var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.step.active .stepDot {
+  background: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+.step.done .stepDot {
+  background: var(--color-accent-emerald);
+}
+
+.step.failed .stepDot {
+  background: var(--color-accent-rose);
+}
+
+/* Connector line between steps */
+.connector {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-slow) var(--ease-standard);
+}
+
+.step.done + .step .connector,
+.connectorDone {
+  background: var(--color-accent-emerald);
+}
+
+/* --- Status badge --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.badge.uploading {
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+}
+
+.badge.extracting {
+  color: var(--color-accent-amber);
+  background: var(--color-accent-amber-muted);
+}
+
+.badge.embedding {
+  color: var(--color-accent-violet);
+  background: var(--color-accent-violet-muted);
+}
+
+.badge.ready {
+  color: var(--color-accent-emerald);
+  background: var(--color-accent-emerald-muted);
+}
+
+.badge.failed {
+  color: var(--color-accent-rose);
+  background: var(--color-accent-rose-muted);
+}
+
+/* --- Spinner icon (inline, small) --- */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 6px var(--color-primary-glow);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 14px var(--color-primary-glow);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

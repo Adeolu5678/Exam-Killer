@@ -1,0 +1,198 @@
+/* =============================================================================
+   features/sources/ui/UploadZone.module.css
+   ============================================================================= */
+
+/* --- Drop Zone --- */
+.zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 200px;
+  padding: var(--space-12) var(--space-8);
+  border-radius: var(--radius-xl);
+  border: 2px dashed var(--color-border);
+  background: var(--color-bg-elevated);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    background var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+  outline: none;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .zone {
+    padding: var(--space-8) var(--space-4);
+    min-height: 160px;
+    gap: var(--space-3);
+  }
+}
+
+.zone:hover,
+.zone:focus-visible {
+  border-color: var(--color-border-accent);
+  background: var(--color-bg-surface);
+}
+
+.zone.dragActive {
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+/* Hidden file input */
+.input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  /* Allow the input to capture pointer events for the whole zone */
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Icon container --- */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-xl);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  transition: transform var(--duration-base) var(--ease-spring);
+}
+
+.zone.dragActive .iconWrap {
+  transform: scale(1.1) translateY(-4px);
+}
+
+/* --- Text --- */
+.title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+  text-align: center;
+}
+
+.subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .title {
+    font-size: var(--font-size-sm);
+  }
+  .subtitle {
+    font-size: var(--font-size-xs);
+  }
+}
+
+.highlight {
+  color: var(--color-primary);
+}
+
+/* --- Accepted types pills --- */
+.acceptedTypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.typePill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* --- Upload queue (in-progress items shown inside zone) --- */
+.queue {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.queueItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+}
+
+.queueFileName {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Progress bar --- */
+.progressBar {
+  width: 80px;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent-violet));
+  border-radius: var(--radius-full);
+  transition: width 0.2s var(--ease-standard);
+}
+
+/* Status icon colours */
+.statusDone {
+  color: var(--color-accent-emerald);
+}
+.statusError {
+  color: var(--color-accent-rose);
+}
+.statusLoading {
+  color: var(--color-primary);
+}
+
+/* Drag overlay label */
+.dragLabel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+
+.zone.dragActive .dragLabel {
+  opacity: 1;
+}

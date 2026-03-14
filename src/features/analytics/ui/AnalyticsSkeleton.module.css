@@ -1,0 +1,116 @@
+/* =============================================================================
+   features/analytics/ui/AnalyticsSkeleton.module.css
+   ============================================================================= */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Heading */
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.headingTitle {
+  height: 28px;
+  width: 200px;
+  border-radius: var(--radius-md);
+}
+
+.headingSubtitle {
+  height: 16px;
+  width: 280px;
+  border-radius: var(--radius-md);
+}
+
+/* Stats grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .statsGrid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* Chart skeleton */
+.chartWrap {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.chartHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.chartTitle {
+  height: 20px;
+  width: 140px;
+  border-radius: var(--radius-md);
+}
+
+.chartRange {
+  height: 32px;
+  width: 120px;
+  border-radius: var(--radius-md);
+}
+
+.chartBody {
+  height: 260px;
+  border-radius: var(--radius-md);
+}
+
+/* Streak skeleton */
+.streakWrap {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.streakHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.streakTitle {
+  height: 20px;
+  width: 120px;
+  border-radius: var(--radius-md);
+}
+
+.streakBadge {
+  height: 24px;
+  width: 80px;
+  border-radius: var(--radius-full);
+}
+
+.streakGrid {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  gap: 3px;
+}
+
+.streakCell {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+}

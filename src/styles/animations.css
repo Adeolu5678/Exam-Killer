@@ -1,0 +1,277 @@
+/* =============================================================================
+   EXAM-KILLER — ANIMATION KEYFRAMES
+   Layer: styles (foundational)
+   Rule: Import this file via styles/globals.css ONLY.
+   ============================================================================= */
+
+/* --- Entrance Animations --- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* --- Looping Animations --- */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ping {
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* --- Score / Progress Animations --- */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes progressFill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--progress-width, 100%);
+  }
+}
+
+/* --- Flashcard Flip --- */
+@keyframes cardFlipFront {
+  0% {
+    transform: rotateY(0deg);
+  }
+  100% {
+    transform: rotateY(180deg);
+  }
+}
+
+@keyframes cardFlipBack {
+  0% {
+    transform: rotateY(-180deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+/* --- Notification / Feedback --- */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- Streak / Gamification --- */
+@keyframes streakPulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-accent-amber-muted);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 166, 35, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 166, 35, 0);
+  }
+}
+
+/* --- Utility Animation Classes --- */
+.animate-fade-in {
+  animation: fadeIn var(--duration-slow) var(--ease-decelerate) both;
+}
+.animate-fade-in-up {
+  animation: fadeInUp var(--duration-slow) var(--ease-decelerate) both;
+}
+.animate-fade-in-down {
+  animation: fadeInDown var(--duration-slow) var(--ease-decelerate) both;
+}
+.animate-fade-in-scale {
+  animation: fadeInScale var(--duration-slow) var(--ease-spring) both;
+}
+.animate-slide-left {
+  animation: slideInLeft var(--duration-slow) var(--ease-decelerate) both;
+}
+.animate-slide-right {
+  animation: slideInRight var(--duration-slow) var(--ease-decelerate) both;
+}
+.animate-pop-in {
+  animation: popIn var(--duration-slow) var(--ease-spring) both;
+}
+.animate-shake {
+  animation: shake 400ms var(--ease-standard) both;
+}
+.animate-float {
+  animation: float 3s var(--ease-standard) infinite;
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+.animate-pulse {
+  animation: pulse 2s var(--ease-standard) infinite;
+}
+.animate-ping {
+  animation: ping 1s var(--ease-standard) infinite;
+}
+.animate-streak {
+  animation: streakPulse 1.5s var(--ease-standard) infinite;
+}
+
+/* Stagger delay utilities */
+.delay-1 {
+  animation-delay: 60ms;
+}
+.delay-2 {
+  animation-delay: 120ms;
+}
+.delay-3 {
+  animation-delay: 180ms;
+}
+.delay-4 {
+  animation-delay: 240ms;
+}
+.delay-5 {
+  animation-delay: 300ms;
+}
+.delay-6 {
+  animation-delay: 360ms;
+}
+
+/* --- Reduced motion override (accessibility) --- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

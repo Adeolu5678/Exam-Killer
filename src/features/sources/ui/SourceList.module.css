@@ -1,0 +1,105 @@
+/* =============================================================================
+   features/sources/ui/SourceList.module.css
+   ============================================================================= */
+
+/* --- Outer container --- */
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* --- Section header --- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+/* --- Source list (virtual scroll container) --- */
+.listWrap {
+  position: relative;
+  overflow-y: auto;
+  max-height: 600px;
+  border-radius: var(--radius-lg);
+  scrollbar-width: thin;
+}
+
+/* Virtual rows */
+.virtualRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-bottom: var(--space-3);
+}
+
+/* Static (non-virtualized) list for ≤50 items */
+.staticList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* --- Empty state --- */
+.emptyWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-8);
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.emptySubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  max-width: 36ch;
+  margin: 0;
+}
+
+/* --- Error state --- */
+.errorWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-8);
+  text-align: center;
+}
+
+.errorTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent-rose);
+  margin: 0;
+}
+
+.errorMessage {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  max-width: 40ch;
+  margin: 0;
+}

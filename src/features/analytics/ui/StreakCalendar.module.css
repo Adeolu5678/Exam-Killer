@@ -1,0 +1,153 @@
+/* =============================================================================
+   features/analytics/ui/StreakCalendar.module.css
+   Amber heatmap cells for study days; grey for gaps.
+   ============================================================================= */
+
+.wrapper {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+/* Header */
+.header {
+  margin-bottom: var(--space-4);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.streakBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--color-accent-amber-muted);
+  color: var(--color-accent-amber);
+  border: 1px solid rgba(245, 166, 35, 0.25);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  max-width: none;
+}
+
+/* Month label row */
+.monthRow {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.monthCell {
+  height: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.monthLabel {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+/* Calendar cells */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  gap: 3px;
+  margin-bottom: var(--space-3);
+}
+
+.cell {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  cursor: default;
+  animation: cellIn var(--duration-slow) var(--ease-standard) both;
+  transition:
+    transform var(--duration-fast) var(--ease-spring),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.cell:hover {
+  transform: scale(1.3);
+  z-index: 1;
+  position: relative;
+}
+
+/* Today ring */
+.today {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Intensity levels — grey baseline → amber active */
+.intensityNone {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+}
+
+.intensity1 {
+  background: rgba(245, 166, 35, 0.25);
+  border: 1px solid rgba(245, 166, 35, 0.15);
+}
+
+.intensity2 {
+  background: rgba(245, 166, 35, 0.55);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+}
+
+.intensity3 {
+  background: var(--color-accent-amber);
+  border: 1px solid rgba(245, 166, 35, 0.6);
+  box-shadow: 0 0 6px rgba(245, 166, 35, 0.3);
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-content: flex-end;
+}
+
+.legendLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.legendCell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+/* Entrance animation */
+@keyframes cellIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

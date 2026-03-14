@@ -1,0 +1,363 @@
+# Exam-Killer: Frontend Redesign Blueprint
+### Principal Front-End Architect & UI/UX Visionary Report
+
+---
+
+## Executive Summary
+
+This blueprint prescribes a complete front-end redesign of Exam-Killer, an AI-powered study companion targeting Nigerian university students. The redesign must transcend the current utility-first implementation and establish a product that feels as premium and polished as **Vercel**, **Linear**, or **Notion** — deeply intentional, fast, and beautiful.
+
+The guiding philosophy: **"Academic rigor meets digital delight."** Students should feel proud showing this app to their peers.
+
+---
+
+## 1. Design System
+
+### 1.1 Visual Identity
+
+**Aesthetic Direction: Dark-first, Editorial/Premium Tech**
+
+The core aesthetic is inspired by Vercel's deployment dashboard crossed with an editorial intelligence brand. Dark mode is the default (aligned with developer/student culture). The palette is not merely dark — it has *depth, warmth, and hierarchy.*
+
+#### Color Palette
+
+| Token | Value | Usage |
+|---|---|---|
+| `--color-bg-base` | `#080B12` | Main canvas — near-black with deep blue undertone |
+| `--color-bg-elevated` | `#0F1420` | Cards, modals, sidebars |
+| `--color-bg-surface` | `#171E2E` | Input fields, hover states |
+| `--color-border` | `#1E2A40` | Dividers, card borders |
+| `--color-border-accent` | `#2D4A7A` | Focus rings, selected states |
+| `--color-primary` | `#3D7BF5` | CTAs, active states — electric blue |
+| `--color-primary-glow` | `rgba(61,123,245,0.2)` | Glow effects, hover overlays |
+| `--color-accent-amber` | `#F5A623` | Scores, streaks, gamification |
+| `--color-accent-emerald` | `#22C55E` | Correct answers, success |
+| `--color-accent-rose` | `#F43F5E` | Errors, wrong answers, destructive |
+| `--color-text-primary` | `#F0F4FF` | Headings, primary body |
+| `--color-text-secondary` | `#8896B3` | Labels, captions, helper text |
+| `--color-text-muted` | `#4A5568` | Placeholders, disabled states |
+
+**Light mode** will be a tinted warm-white variant, NOT a simple inversion. Light mode is a first-class citizen but secondary to dark.
+
+#### Color Application Logic
+
+- **The 60-30-10 Rule**: 60% background tones, 30% surface/card tones, 10% accent-primary.
+- Avoid "rainbow dashboards." Only use accent-amber/emerald/rose for *data-carrying* contexts (scores, feedback).
+- No gradients unless intentional: the primary CTA may have a `linear-gradient(135deg, #3D7BF5, #6366F1)` for emphasis.
+
+---
+
+### 1.2 Typography
+
+**Pairing: Geist (Display) + Geist Mono (code) + Instrument Serif (editorial accents)**
+
+| Role | Font | Weight | Size Scale |
+|---|---|---|---|
+| Hero/Display | `Geist` | 700-900 | `64px–96px` |
+| Page Headings (H1–H3) | `Geist` | 600–700 | `32px, 24px, 20px` |
+| Body / UI Labels | `Geist` | 400–500 | `15px, 13px` |
+| Monospace (code, IDs) | `Geist Mono` | 400 | `13px` |
+| Editorial Pull Quotes | `Instrument Serif` | 400 italic | `18px–22px` |
+
+**Rationale**: Geist is Vercel's own typeface — it communicates technical precision. Instrument Serif provides warmth and human contrast for pull quotes in the AI tutor interface. The combination is unique in Nigerian edtech.
+
+#### Typography Rules
+- Line heights: `1.4` for body, `1.15` for headings.
+- Track large headings at `-0.02em` letter-spacing.
+- Never exceed 70 characters per line for readability.
+- Use `font-feature-settings: "cv01" 1, "ss01" 1` for Geist's ligatures.
+
+---
+
+### 1.3 Spatial System & Layout
+
+**8-Point Grid** — all spacing is a multiple of `4px`. Standard primitives: `4, 8, 12, 16, 24, 32, 48, 64, 96`.
+
+**Layout Principles:**
+- **Generous whitespace** — "let components breathe." Cards have `24px` internal padding minimum.
+- **Asymmetric grids** — the sidebar + content split is `260px / 1fr`, not centered. This creates editorial dynamism.
+- **Sticky anchors** — workspace navigation and the AI tutor input box are always visible.
+- **Content density mode** — a setting allowing users to switch between Comfortable (default) and Compact for power users.
+
+---
+
+### 1.4 Motion & Interaction Design
+
+All motion follows the principle: **Purposeful, Never Decorative.**
+
+#### Motion Tokens
+
+| Token | Value | Use Case |
+|---|---|---|
+| `--ease-standard` | `cubic-bezier(0.4, 0, 0.2, 1)` | Page transitions, modal open/close |
+| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Pill toggles, card selection, score reveals |
+| `--duration-fast` | `120ms` | Button press feedback |
+| `--duration-base` | `200ms` | Hover states, focus rings |
+| `--duration-slow` | `350ms` | Page transitions, panel slides |
+
+#### Key Micro-Interactions
+
+1. **Workspace Card**: On hover, `translateY(-2px)` + border changes from `--color-border` to `--color-border-accent` + subtle glow shadow.
+2. **AI Chat Message**: New assistant messages stream in with a "typewriter" cursor, then the streak bar at the top briefly pulses.
+3. **Flashcard Flip**: 3D `rotateY(180deg)` transform using `perspective` + `transform-style: preserve-3d`. Duration: `400ms` with spring easing.
+4. **Quiz Answer Selection**: Selected option collapses sidebar and plays a micro-haptic-style box-shadow burst.
+5. **Score Reveal**: Uses a numerical count-up animation (0% → final%) with the number turning amber/emerald depending on result.
+6. **Sidebar Navigation**: Active route indicator slides with `transition: top 200ms var(--ease-standard)` — not a flash-change.
+7. **Staggered Page Load**: Dashboard cards load with `translateY(8px) opacity-0 → 0 opacity-1` staggered at `60ms` intervals.
+
+**Library: Framer Motion** for complex sequences; CSS transitions for micro-interactions. This hybrid approach avoids JS overhead on trivial states.
+
+---
+
+### 1.5 Iconography & Illustration
+
+- **Icons**: `lucide-react` — clean, consistent, and actively maintained. Size `16px` (inline) and `20px` (navigation).
+- **Empty States**: Custom minimal SVG illustrations, not stock. Each empty state is unique to its context (e.g., empty flashcard deck = a floating card illustration, empty chat = a speech bubble with stars).
+- **Avatars**: Generated using identicons or DiceBear Avatars based on the user's UID for instant personalization without upload friction.
+
+---
+
+## 2. Architectural Strategy
+
+### 2.1 Core Principle: Feature-Sliced Architecture
+
+The current `src/components/{feature}/` structure is correct but incomplete. We will formalize it into **Feature-Sliced Design (FSD)** — a methodology used by Yandex and adopted by large Next.js codebases.
+
+```
+src/
+├── app/                    # Next.js routing layer (thin pages only)
+│   ├── (auth)/             # Auth route group - no layout
+│   ├── (app)/              # App route group - with AppShell layout
+│   │   ├── dashboard/
+│   │   └── workspace/[id]/ # Nested layouts (WorkspaceShell)
+│   └── api/                # Server-side API routes
+│
+├── features/               # Feature modules (primary business logic)
+│   ├── workspace/          # Workspace CRUD, WorkspaceCard, WorkspaceCreator
+│   ├── flashcards/         # Deck, FlashCard, ReviewQueue, SPRepetitionEngine
+│   ├── quizzes/            # QuizBuilder, QuizPlayer, ScoreReveal
+│   ├── tutor/              # ChatInterface, MessageBubble, PersonalitySelector
+│   ├── analytics/          # StatsCard, ProgressChart, StreakCalendar
+│   ├── sources/            # UploadZone, SourceCard, ProcessingStatus
+│   └── study-plan/         # PlannerCalendar, ExamCountdown
+│
+├── widgets/                # Composed UI blocks assembled from features + entities
+│   ├── AppShell/           # Global sidebar + topbar layout
+│   ├── WorkspaceShell/     # Per-workspace nav + content area
+│   └── CommandPalette/     # ⌘K global command palette
+│
+├── shared/                 # Truly shared, zero business logic
+│   ├── ui/                 # Design system primitives (Button, Badge, Card, Input…)
+│   ├── hooks/              # useDebounce, useMediaQuery, useLocalStorage
+│   ├── lib/                # Firebase clients, OpenAI client, Paystack helpers
+│   ├── stores/             # Zustand stores (authStore, workspaceStore, uiStore)
+│   └── types/              # Global TypeScript types and Zod schemas
+│
+└── styles/
+    ├── globals.css          # CSS variables (design tokens), base reset
+    └── animations.css       # Keyframe definitions
+```
+
+**Dependency Rule**: `app → features → widgets → shared`. No layer may import from a layer above it. This is enforced by an ESLint rule.
+
+---
+
+### 2.2 Component Hierarchy
+
+Each `features/{name}/` directory follows a standardized internal structure:
+
+```
+features/flashcards/
+├── index.ts                # Public API - what this feature exports
+├── ui/                     # Presentational components (pure, no Firebase)
+│   ├── FlashCard.tsx
+│   ├── FlashCardDeck.tsx
+│   └── ReviewQueue.tsx
+├── model/                  # Business logic: hooks + Zustand slice
+│   ├── useFlashcards.ts    # Data fetching hook
+│   └── flashcardsStore.ts  # Zustand slice
+└── api/                    # API contract: fetch function that calls Next.js route
+    └── flashcardsApi.ts
+```
+
+This means the Next.js page at `/workspace/[id]/flashcards/page.tsx` only assembles composition, never contains logic.
+
+---
+
+### 2.3 State Management Architecture
+
+**Three-tier state model using Zustand + React Query (TanStack Query):**
+
+| Layer | Tool | Scope | Examples |
+|---|---|---|---|
+| **Server State** | TanStack Query | Remote data, cached | Workspaces list, flashcards, quiz results |
+| **Global Client State** | Zustand | Cross-component, persistent | Auth user, active workspace, sidebar collapse state |
+| **Local UI State** | `useState` / `useReducer` | Single component | Modal open, input value, hover state |
+
+**Rules:**
+- Never store server data in Zustand. Use TanStack Query's cache as the single source of truth for all Firestore data.
+- Zustand is for **ephemeral UI state** (sidebar state, active modal) and session auth.
+- `optimistic updates` via `useMutation`'s `onMutate` for instant UI feedback on likes, flips, and ratings.
+
+---
+
+### 2.4 Performance Architecture
+
+| Technique | Application |
+|---|---|
+| **Route-based code splitting** | Next.js handles this automatically via app router |
+| **Lazy loading of heavy features** | Tutor chat, Analytics charts loaded with `next/dynamic` + suspense skeleton |
+| **Image optimization** | All images via `next/image` with explicit `width/height` |
+| **Font subsetting** | Geist loaded as a CSS variable via `next/font/local` |
+| **Web Vitals targets** | LCP < 2.5s, CLS < 0.1, INP < 200ms |
+| **Edge caching** | Static workspace metadata served from Vercel Edge Network |
+| **Skeleton loading** | All async content has a shimmer skeleton, never raw spinners |
+| **Virtualized lists** | Source lists and flashcard decks > 50 items use `@tanstack/virtual` |
+
+---
+
+### 2.5 AppShell Layout Design
+
+The global layout is a **three-panel shell** inspired by Linear and VS Code:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  TopBar: [Logo] [Workspace Switcher]        [⌘K] [👤] │  48px
+├────────────┬─────────────────────────────────────────┤
+│            │                                          │
+│  Sidebar   │           Main Content Area              │
+│  (260px)   │                                          │
+│  ─────     │  Breadcrumb > SubNav > Page Content      │
+│  Nav Items │                                          │
+│            │                                          │
+│  [FREE]    │                                          │
+│  Upgrade   │                                          │
+│  CTA Card  │                                          │
+└────────────┴─────────────────────────────────────────┘
+```
+
+- Sidebar collapses to `60px` icon-only mode on screens < `1280px`.
+- On mobile (`< 768px`), sidebar becomes a bottom-sheet drawer triggered by a hamburger icon in the TopBar.
+- `WorkspaceShell` adds a **secondary horizontal sub-navigation** (Sources, Flashcards, Quizzes, Tutor, Analytics) below the TopBar — a persistent tab bar styled as a pill group.
+
+---
+
+### 2.6 Key Page Blueprints
+
+#### Dashboard (`/dashboard`)
+- **Hero section**: Time-sensitive greeting ("Good morning, [name]") + today's review queue count as an urgent action card.
+- **Workspace grid**: Bento-style grid of `WorkspaceCard` components. Cards show subject, last activity, progress ring, and member count.
+- **Streak widget**: A horizontal calendar heatmap showing 30-day activity. Amber cells for study days, grey for gaps.
+- **Quick Actions**: Floating action button (FAB) → "New Workspace" or "Continue last session."
+
+#### Workspace Tutor (`/workspace/[id]/tutor`)
+- **Full-screen chat UI** with workspace sources displayed in a collapsible right panel.
+- **Personality selector**: A horizontal row of clickable avatar cards (Drill Sergeant, Patient Mentor, etc.) with distinct visual personalities.
+- **Message bubbles**: User messages right-aligned, assistant left-aligned with its personality avatar. Streamed tokens render progressively.
+- **Citation chips**: When the AI references a source, a small chip `📄 Chapter 3.pdf` appears inline — clickable to open the source.
+
+#### Flashcard Review (`/workspace/[id]/flashcards`)
+- **Deck overview**: Cards displayed with mastery color coding (red → amber → green gradient).
+- **Review mode**: Full-screen card with keyboard shortcuts (`Space` to flip, `1/2/3` for difficulty). Progress bar at top.
+- **Stats row**: Shows estimated time to master the deck, daily goal ring, and streak.
+
+---
+
+### 2.7 Ralph Workflow Alignment
+
+| Ralph Principle | Front-End Implementation |
+|---|---|
+| **Modularity** | Feature-Sliced Design prevents feature coupling; each feature is independently deployable as a module |
+| **Deployment Readiness** | Environment config via `.env.local`; `next.config.js` uses `output: 'standalone'` for Docker; Vercel `vercel.json` defines region pinning |
+| **Stateless Handoffs** | All agent-delegated components are self-contained with their own data hooks; no prop-drilling across feature boundaries |
+| **Documented Contracts** | Each `features/*/index.ts` exports a typed public API; consumers may not reach into internal files |
+| **Task Registry** | Each new component created by an agent is logged in `.agent/docs/task-registry.md` |
+
+---
+
+## 3. Tech Stack & Tooling
+
+### 3.1 Core Stack (No Changes)
+
+The existing stack is sound. Keep: **Next.js 14 (App Router), TypeScript, Firebase, Tailwind CSS, OpenAI, Pinecone, Paystack.**
+
+### 3.2 New Additions (Justified)
+
+| Library | Purpose | Why Not X? |
+|---|---|---|
+| `@tanstack/react-query` v5 | Server state management | Replaces custom `useEffect` data fetching; provides caching, retries, optimistic updates |
+| `framer-motion` v11 | Complex animation orchestration | CSS-only cannot handle card flip 3D, stagger sequences, or layout animations |
+| `zustand` + `immer` | Immutable global state | Already in use; add `immer` middleware for ergonomic nested state mutations |
+| `@tanstack/virtual` | List virtualization | Required for sources lists and flashcard decks at scale |
+| `zod` | Runtime schema validation | Already in project; expand usage to all API request/response boundaries |
+| `lucide-react` | Icon library | Replace any current SVG chaos with a single consistent set |
+| `next/font` (Geist) | Self-hosted font optimization | Zero layout shift, optimal loading via CSS variable |
+| `recharts` | Analytics charts | Lightweight, composable, works with Tailwind utility classes |
+| `cmdk` | Command palette (⌘K) | Powers the global command palette for power-user navigation |
+| `@radix-ui/react-*` | Accessible UI primitives | Headless, accessible popovers, dialogs, tooltips — styled via design tokens |
+
+### 3.3 Developer Tooling
+
+| Tool | Config |
+|---|---|
+| **ESLint** | Add `eslint-plugin-import` with FSD boundary rules to enforce layer dependencies |
+| **Prettier** | Already configured; add `prettier-plugin-tailwindcss` for class sorting |
+| **TypeScript** | Increase strictness: `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true` |
+| **Storybook** | Set up for the `shared/ui` component library — each primitive documented in isolation |
+| **Husky + lint-staged** | Pre-commit hook runs `eslint --fix` and `prettier` before every commit |
+
+### 3.4 Deployment Architecture
+
+```
+                    ┌──────────────────────────────────┐
+                    │          Vercel Edge Network       │
+                    │  (Global CDN + Edge Middleware)    │
+                    └──────────────┬───────────────────┘
+                                   │
+              ┌────────────────────┴────────────────────┐
+              │                                          │
+     ┌────────┴────────┐                    ┌────────────┴───────┐
+     │  Server Comps   │                    │  Edge Functions    │
+     │  (SSR pages)    │                    │  (middleware auth)  │
+     └────────┬────────┘                    └────────────────────┘
+              │
+   ┌──────────┴──────────────────────────────────────┐
+   │          Next.js API Routes (Node.js runtime)   │
+   │  (AI processing, Paystack webhooks, Pinecone)   │
+   └──────────────────────────────────────────────────┘
+```
+
+**Docker** (`output: 'standalone'`): The `next.config.js` is pre-configured for `standalone` output. A `Dockerfile` should be maintained at the root for AWS ECS or Render.com deployments:
+
+```dockerfile
+FROM node:20-alpine AS base
+# ... standard Next.js standalone pattern
+EXPOSE 3000
+ENV NODE_ENV=production
+CMD ["node", "server.js"]
+```
+
+---
+
+## 4. Agent Implementation Guidelines
+
+When handing this blueprint to execution agents, the following constraints apply:
+
+> [!IMPORTANT]
+> Each agent task must map to **exactly one feature directory**. An agent building the `flashcards` feature must only touch `src/features/flashcards/`, `src/app/(app)/workspace/[id]/flashcards/`, and add exports to `src/features/flashcards/index.ts`.
+
+> [!WARNING]
+> **Never import from another feature's internal files.** If Feature A needs data from Feature B, it must use Feature B's public `index.ts` export. Violations break the modularity contract.
+
+> [!NOTE]
+> All agent deliverables must include:
+> - The component file(s)
+> - Updated `index.ts` exports
+> - A skeleton loading state for any async component
+> - A Storybook story (or placeholder) for `shared/ui` primitives
+
+---
+
+*Blueprint authored by: Principal Front-End Architect*
+*Date: 2026-03-06*
+*Status: APPROVED FOR EXECUTION*

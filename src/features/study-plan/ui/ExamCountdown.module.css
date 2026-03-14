@@ -1,0 +1,287 @@
+/* =============================================================================
+   features/study-plan/ui/ExamCountdown.module.css
+   ============================================================================= */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.sectionTitle {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+  color: var(--color-text-secondary);
+}
+
+.addBtn {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.addBtn:hover {
+  background: var(--color-primary-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Countdown Card
+   --------------------------------------------------------------------------- */
+
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.countdownCard {
+  position: relative;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  overflow: hidden;
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.countdownCard:hover {
+  border-color: var(--color-border-accent);
+}
+
+.countdownCard[data-primary='true'] {
+  border-color: var(--color-border-accent);
+  box-shadow: 0 0 0 1px var(--color-border-accent);
+}
+
+.countdownCard[data-urgent='true'] {
+  border-color: rgba(245, 166, 35, 0.4);
+  box-shadow: 0 0 24px rgba(245, 166, 35, 0.08);
+}
+
+.countdownCard[data-past='true'] {
+  opacity: 0.6;
+}
+
+/* Card header */
+.cardHeader {
+  margin-bottom: var(--space-5);
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.subjectBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 2px var(--space-2);
+}
+
+.countdownCard[data-urgent='true'] .subjectBadge {
+  color: var(--color-accent-amber);
+  background: var(--color-accent-amber-muted);
+  border-color: rgba(245, 166, 35, 0.3);
+}
+
+.examTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-tight);
+}
+
+.venue {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  max-width: none;
+}
+
+/* Digit row */
+.digitRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.digitBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 64px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    background var(--duration-base) var(--ease-standard);
+}
+
+.digitBlock[data-urgent='true'] {
+  border-color: rgba(245, 166, 35, 0.35);
+  background: rgba(245, 166, 35, 0.06);
+}
+
+.digitValue {
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  line-height: 1;
+  overflow: hidden;
+  height: 1.2em;
+  display: flex;
+  align-items: center;
+}
+
+.digitBlock[data-urgent='true'] .digitValue {
+  color: var(--color-accent-amber);
+}
+
+.digitLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+}
+
+.digitSeparator {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  margin-bottom: 14px;
+  user-select: none;
+}
+
+/* Urgency strip — amber bar at bottom of card */
+.urgencyStrip {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-accent-amber), rgba(245, 166, 35, 0.3));
+  transform-origin: left;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* Today & past banners */
+.todayBanner,
+.pastBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.todayBanner {
+  color: var(--color-accent-amber);
+  background: var(--color-accent-amber-muted);
+  border: 1px solid rgba(245, 166, 35, 0.25);
+}
+
+.pastBanner {
+  color: var(--color-accent-emerald);
+  background: var(--color-accent-emerald-muted);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+
+.emptyIllustration {
+  width: 96px;
+  height: 80px;
+  animation: floatAnim 4s ease-in-out infinite;
+}
+
+@keyframes floatAnim {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.emptyText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  max-width: none;
+}
+
+.emptyAction {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.emptyAction:hover {
+  background: rgba(61, 123, 245, 0.2);
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
+/* Skeleton */
+.skeletonCard {
+  padding: var(--space-6);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.skeletonDigits {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}

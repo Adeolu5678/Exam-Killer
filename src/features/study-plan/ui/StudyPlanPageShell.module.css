@@ -1,0 +1,370 @@
+/* =============================================================================
+   features/study-plan/ui/StudyPlanPageShell.module.css
+   ============================================================================= */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  max-width: var(--content-max-width);
+}
+
+@media (max-width: 640px) {
+  .root {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Page Header
+   --------------------------------------------------------------------------- */
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.headerText {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.headerIcon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-muted);
+  border: 1px solid rgba(61, 123, 245, 0.25);
+  border-radius: var(--radius-md);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.pageTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+@media (max-width: 640px) {
+  .pageTitle {
+    font-size: var(--font-size-xl);
+  }
+}
+
+.pageSubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+  max-width: none;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .headerActions {
+    width: 100%;
+  }
+  .headerActions > button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.actionBtn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-accent);
+  color: var(--color-text-primary);
+}
+
+.actionBtnPrimary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-primary);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.actionBtnPrimary:hover {
+  background: var(--color-primary-hover);
+  box-shadow: 0 0 16px var(--color-primary-glow);
+}
+
+/* ---------------------------------------------------------------------------
+   Stats Row
+   --------------------------------------------------------------------------- */
+
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .statsRow {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.statPill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+@media (max-width: 640px) {
+  .statPill {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+}
+
+.statPill:hover {
+  border-color: var(--color-border-accent);
+}
+
+.statPill[data-variant='primary'] .statPillIcon {
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+}
+
+.statPill[data-variant='amber'] .statPillIcon {
+  color: var(--color-accent-amber);
+  background: var(--color-accent-amber-muted);
+}
+
+.statPill[data-variant='emerald'] .statPillIcon {
+  color: var(--color-accent-emerald);
+  background: var(--color-accent-emerald-muted);
+}
+
+.statPillIcon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  transition:
+    background var(--duration-base),
+    color var(--duration-base);
+}
+
+.statPillContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statPillValue {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: 1;
+}
+
+.statPillLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Main Grid
+   --------------------------------------------------------------------------- */
+
+.mainGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .mainGrid {
+    grid-template-columns: 1fr 320px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar
+   --------------------------------------------------------------------------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  position: sticky;
+  top: calc(var(--topbar-height) + var(--workspace-subnav-height) + var(--space-6));
+}
+
+.sidebarDivider {
+  height: 1px;
+  background: var(--color-border);
+}
+
+.sectionLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+  color: var(--color-text-secondary);
+  max-width: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Today's Sessions
+   --------------------------------------------------------------------------- */
+
+.todaysSessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.noSessionsText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-4) 0;
+  max-width: none;
+}
+
+.sessionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sessionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
+}
+
+.sessionRow:hover {
+  border-color: var(--color-border-accent);
+}
+
+.sessionRow[data-done='true'] {
+  opacity: 0.5;
+}
+
+.sessionColorBar {
+  width: 3px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.sessionInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sessionName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sessionTime {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.checkBtn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+  cursor: pointer;
+}
+
+.checkBtn:hover:not(:disabled) {
+  color: var(--color-accent-emerald);
+  background: var(--color-accent-emerald-muted);
+}
+
+.checkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.doneIcon {
+  color: var(--color-accent-emerald);
+  flex-shrink: 0;
+}
