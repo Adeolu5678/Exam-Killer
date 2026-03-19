@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { Firestore } from 'firebase-admin/firestore';
 
 import { withAuth, successResponse, errorResponse, StatusCodes } from '@/shared/lib/api/auth';
-import { getAdminStorage } from '@/shared/lib/firebase/admin';
+import { getAdminDb, getAdminStorage, getStorageBucket } from '@/shared/lib/firebase/admin';
 import { SourcesListResponse, UploadSourceResponse } from '@/shared/types/api';
 
 const ALLOWED_MIME_TYPES = [
@@ -156,7 +156,13 @@ export const POST = withAuth(async (request, { db, userId }) => {
   const fileBuffer = Buffer.from(await file.arrayBuffer());
 
   const storagePath = `users/${userId}/workspaces/${workspaceId}/sources/${sourceId}_${fileName}`;
-  const bucket = storage.bucket();
+  const bucketName = getStorageBucket();
+  if (!bucketName) {
+    console.error('Storage bucket name not found in environment variables');
+    return errorResponse('Storage bucket not configured', StatusCodes.INTERNAL_ERROR);
+  }
+
+  const bucket = storage.bucket(bucketName);
   const fileUpload = bucket.file(storagePath);
 
   await fileUpload.save(fileBuffer, {

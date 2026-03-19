@@ -168,3 +168,39 @@ export async function processSource(sourceId: string): Promise<ProcessSourceResp
     credentials: 'include' as RequestCredentials,
   });
 }
+
+/**
+ * Fetches the NLM notebook associated with a workspace.
+ */
+export async function getNlmNotebook(
+  workspaceId: string,
+): Promise<{ notebook_id: string; profile_name: string } | null> {
+  try {
+    return apiFetch<{ notebook_id: string; profile_name: string }>(
+      `/api/notebooklm/notebooks?workspaceId=${workspaceId}`,
+      { method: 'GET', credentials: 'include' as RequestCredentials },
+    );
+  } catch (err: any) {
+    if (err.status === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Pushes a source URL to an NLM notebook.
+ */
+export async function addSourceToNlm(
+  notebookId: string,
+  workspaceId: string,
+  sourceUrl: string,
+): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/notebooklm/notebooks/${notebookId}/sources`, {
+    method: 'POST',
+    body: JSON.stringify({
+      workspaceId,
+      sourceType: 'url',
+      value: sourceUrl,
+    }),
+    credentials: 'include' as RequestCredentials,
+  });
+}

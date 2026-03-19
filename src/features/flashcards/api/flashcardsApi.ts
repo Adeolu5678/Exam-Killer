@@ -101,3 +101,34 @@ export async function submitFlashcardReview(
     body: JSON.stringify({ quality }),
   });
 }
+
+/**
+ * Generate flashcards via NotebookLM.
+ * Note: Returns a list of flashcards directly.
+ */
+export async function generateNlmFlashcards(
+  notebookId: string,
+  workspaceId: string,
+): Promise<FlashcardsListResponse> {
+  return apiFetch<FlashcardsListResponse>(`/api/notebooklm/notebooks/${notebookId}/flashcards`, {
+    method: 'POST',
+    body: JSON.stringify({ workspaceId }),
+  });
+}
+
+/**
+ * Fetches the NLM notebook associated with a workspace.
+ */
+export async function getNlmNotebook(
+  workspaceId: string,
+): Promise<{ notebook_id: string; profile_name: string } | null> {
+  try {
+    return apiFetch<{ notebook_id: string; profile_name: string }>(
+      `/api/notebooklm/notebooks?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { method: 'GET' },
+    );
+  } catch (err: any) {
+    // API returns 404 if no notebook exists for the workspace
+    return null;
+  }
+}

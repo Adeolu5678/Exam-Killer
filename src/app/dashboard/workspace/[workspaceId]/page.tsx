@@ -29,7 +29,7 @@ export default function WorkspacePage() {
           <h2 className="mb-4 text-sm font-semibold text-[var(--color-text-primary)]">
             Your Sources
           </h2>
-          <SourceList workspaceId={workspaceId} />
+          <SourceList workspaceId={workspaceId} showUploadZone={false} />
         </div>
       </div>
     </div>

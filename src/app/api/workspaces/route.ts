@@ -145,6 +145,16 @@ export const POST = withAuth(async (request, { db, userId }) => {
       last_accessed: now,
     });
 
+    // Automatically initialize NotebookLM notebook
+    let nlmNotebook = null;
+    try {
+      const { NlmService } = await import('@/shared/lib/notebooklm');
+      nlmNotebook = await NlmService.initializeNotebook(userId, workspaceId, name);
+    } catch (err: any) {
+      console.error('[WorkspacesAPI] Failed to initialize NLM notebook:', err);
+      // We continue since the workspace is created, but the NLM feature will be limited
+    }
+
     return successResponse(
       {
         workspace: {
@@ -152,6 +162,7 @@ export const POST = withAuth(async (request, { db, userId }) => {
           name,
           description,
         },
+        nlm: nlmNotebook,
       },
       201,
     );

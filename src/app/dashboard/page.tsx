@@ -107,7 +107,7 @@ export default function DashboardPage() {
       {/* ── WorkspaceCreator dialog ──────────────────────────────────────
           Self-contained: reads workspaceStore.isCreatorOpen internally.
       ─────────────────────────────────────────────────────────────────── */}
-      <WorkspaceCreator />
+      <WorkspaceCreator onSuccess={(id) => router.push(`/dashboard/workspace/${id}`)} />
 
       {/* ── Floating Action Button ───────────────────────────────────── */}
       <DashboardFAB />

@@ -15,7 +15,12 @@ import { nanoid } from 'nanoid';
 import { useTutorStore } from './tutorStore';
 import type { ChatMessage, CitationChip } from './types';
 import type { TutorPersonalityId } from './types';
-import { sendMessageStream, fetchConversationHistory } from '../api/tutorApi';
+import {
+  sendMessageStream,
+  fetchConversationHistory,
+  getNlmNotebook,
+  sendNlmQuery,
+} from '../api/tutorApi';
 
 // ---------------------------------------------------------------------------
 // useConversation — manages the local message array
@@ -98,8 +103,32 @@ export function useSendMessage({
       isStreamingRef.current = true;
 
       try {
-        // We pass an empty history for now; a real implementation would read
-        // the full message list from state and pass it here.
+        // 3. Try NLM first if available
+        let nlmNotebook = null;
+        try {
+          nlmNotebook = await getNlmNotebook(workspaceId);
+        } catch (err) {
+          console.error('Failed to check for NLM notebook:', err);
+        }
+
+        if (nlmNotebook) {
+          try {
+            const { answer } = await sendNlmQuery(nlmNotebook.notebook_id, workspaceId, text);
+            updateMessage(assistantMsgId, {
+              content: answer,
+              isStreaming: false,
+            });
+            setIsStreaming(false);
+            setStreamingMessageId(null);
+            isStreamingRef.current = false;
+            return; // Success with NLM
+          } catch (err: any) {
+            console.warn('NLM Query failed, falling back to OpenAI:', err);
+            // Fall through to OpenAI if quota exhausted OR any error
+          }
+        }
+
+        // 4. Default OpenAI Streaming path
         const stream = await sendMessageStream({
           workspaceId,
           message: text,

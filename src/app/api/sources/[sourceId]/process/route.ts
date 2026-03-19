@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 
 import { Storage } from 'firebase-admin/storage';
 import fs from 'fs';
-import { PDFParse } from 'pdf-parse';
 import { fromPath } from 'pdf2pic';
 
 import { withAuth, errorResponse, successResponse, StatusCodes } from '@/shared/lib/api/auth';
@@ -57,6 +56,7 @@ async function extractTextFromFile(
   try {
     if (fileType === 'pdf') {
       const dataBuffer = fs.readFileSync(tempPath);
+      const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: dataBuffer });
       const data = await parser.getText();
       return data.text;

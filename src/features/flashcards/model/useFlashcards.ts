@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 import type { FlashcardItem } from './types';
 import {
@@ -13,6 +14,8 @@ import {
   updateFlashcard,
   deleteFlashcard,
   submitFlashcardReview,
+  generateNlmFlashcards,
+  getNlmNotebook,
 } from '../api/flashcardsApi';
 
 // ── Query key factory ─────────────────────────────────────────────────────────
@@ -119,6 +122,25 @@ export function useReviewFlashcard(workspaceId: string) {
       submitFlashcardReview(flashcardId, quality),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
+    },
+  });
+}
+
+// ── Generate via NLM ─────────────────────────────────────────────────────────
+export function useGenerateNlmFlashcards(workspaceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const notebook = await getNlmNotebook(workspaceId);
+      if (!notebook) throw new Error('No linked NotebookLM notebook found for this workspace.');
+      return generateNlmFlashcards(notebook.notebook_id, workspaceId);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
+      toast.success('Flashcards generated via NLM!');
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'NLM Generation failed');
     },
   });
 }

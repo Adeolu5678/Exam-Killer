@@ -65,3 +65,53 @@ export const GET = withAuth(
     (doc) => doc.data()?.user_id,
   ),
 );
+
+/**
+ * DELETE /api/sources/[sourceId]
+ * Deletes the source document, the file from storage, and associated vectors.
+ */
+export const DELETE = withAuth(
+  withOwnership(
+    async (req, { db, userId }, sourceDoc: any) => {
+      const sourceData = sourceDoc.data() as any;
+      const sourceId = sourceDoc.id;
+      const workspaceId = sourceData.workspace_id;
+
+      try {
+        // 1. Delete from Firebase Storage
+        const storage = getAdminStorage();
+        if (storage && sourceData.storage_path) {
+          try {
+            const bucket = storage.bucket();
+            await bucket.file(sourceData.storage_path).delete();
+          } catch (storageErr) {
+            console.warn('Failed to delete file from storage (might already be gone):', storageErr);
+          }
+        }
+
+        // 2. Delete from Pinecone
+        try {
+          const { deleteBySource } = await import('@/shared/lib/rag/vector-store');
+          await deleteBySource(sourceId, workspaceId);
+        } catch (pineconeErr) {
+          console.warn('Failed to delete vectors from Pinecone:', pineconeErr);
+        }
+
+        // 3. Delete from Firestore
+        await db.collection('sources').doc(sourceId).delete();
+
+        return successResponse({ success: true, message: 'Source deleted successfully' });
+      } catch (error) {
+        console.error('Error deleting source:', error);
+        return errorResponse('Failed to delete source', StatusCodes.INTERNAL_ERROR);
+      }
+    },
+    async (req, { db }) => {
+      const sourceId = req.nextUrl.pathname.split('/').pop();
+      if (!sourceId) return null;
+      const doc = await db.collection('sources').doc(sourceId).get();
+      return doc.exists ? doc : null;
+    },
+    (doc) => doc.data()?.user_id,
+  ),
+);

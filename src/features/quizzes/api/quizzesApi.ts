@@ -77,3 +77,36 @@ export async function submitQuiz(
 export async function deleteQuiz(quizId: string): Promise<void> {
   await apiFetch<void>(`/api/quiz/${quizId}`, { method: 'DELETE' });
 }
+
+/**
+ * Fetches the NLM notebook associated with a workspace.
+ */
+export async function getNlmNotebook(
+  workspaceId: string,
+): Promise<{ notebook_id: string; profile_name: string } | null> {
+  try {
+    return apiFetch<{ notebook_id: string; profile_name: string }>(
+      `/api/notebooklm/notebooks?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { method: 'GET' },
+    );
+  } catch (err: any) {
+    return null;
+  }
+}
+
+/**
+ * Generate a quiz via NotebookLM.
+ */
+export async function generateNlmQuiz(
+  notebookId: string,
+  workspaceId: string,
+): Promise<QuizListItem> {
+  const data = await apiFetch<{ quiz: QuizListItem }>(
+    `/api/notebooklm/notebooks/${notebookId}/quiz`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId }),
+    },
+  );
+  return data.quiz;
+}

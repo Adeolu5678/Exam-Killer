@@ -12,7 +12,14 @@ import { toast } from 'sonner';
 
 import { useSourcesStore } from './sourcesStore';
 import type { SourceItem, UploadProgress } from './types';
-import { fetchSources, uploadSource, deleteSource, processSource } from '../api/sourcesApi';
+import {
+  fetchSources,
+  uploadSource,
+  deleteSource,
+  processSource,
+  getNlmNotebook,
+  addSourceToNlm,
+} from '../api/sourcesApi';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -36,6 +43,13 @@ export function useSources(workspaceId: string) {
     select: (data) => data.sources,
     staleTime: 1000 * 60, // 1 min
     refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const data = query.state.data as { sources: SourceItem[] } | undefined;
+      const hasProcessing = data?.sources?.some(
+        (s) => s.embedding_status === 'processing' || s.embedding_status === 'pending',
+      );
+      return hasProcessing ? 3000 : false;
+    },
   });
 }
 
@@ -76,10 +90,23 @@ export function useUploadSource(workspaceId: string) {
       }
     },
 
-    onSuccess: () => {
+    onSuccess: (data: SourceItem) => {
       // Invalidate the list so new source appears immediately
       void queryClient.invalidateQueries({ queryKey: sourceKeys.list(workspaceId) });
       toast.success('Source uploaded successfully');
+
+      // Secondary action: Push to NLM in background
+      if (data.file_url) {
+        getNlmNotebook(workspaceId)
+          .then((notebook) => {
+            if (notebook) {
+              return addSourceToNlm(notebook.notebook_id, workspaceId, data.file_url);
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to push source to NLM:', err);
+          });
+      }
     },
   });
 

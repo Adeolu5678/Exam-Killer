@@ -14,6 +14,7 @@ import type {
   WorkspacesResponse,
   WorkspaceDetailResponse,
   CreateWorkspaceRequest,
+  CreateWorkspaceResponse,
   UpdateWorkspaceRequest,
 } from '@/shared/types/api';
 
@@ -23,6 +24,7 @@ import {
   createWorkspace,
   updateWorkspace,
   deleteWorkspace,
+  createNlmNotebook,
 } from '../api/workspaceApi';
 
 // ---------------------------------------------------------------------------
@@ -83,9 +85,16 @@ export function useCreateWorkspace() {
   return useMutation({
     mutationFn: (payload: CreateWorkspaceRequest) => createWorkspace(payload),
 
-    onSuccess: () => {
+    onSuccess: (data: CreateWorkspaceResponse) => {
       toast.success('Workspace created successfully');
       void qc.invalidateQueries({ queryKey: workspaceKeys.lists() });
+
+      // Secondary action: Create NLM notebook in background
+      if (data.workspace?.id) {
+        createNlmNotebook(data.workspace.id, data.workspace.name).catch((err) => {
+          console.error('Failed to create NLM notebook for workspace:', err);
+        });
+      }
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to create workspace');

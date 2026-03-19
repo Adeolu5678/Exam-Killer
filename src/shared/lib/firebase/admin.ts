@@ -73,6 +73,7 @@ function initializeFirebaseAdmin(): FirebaseAdminApp | null {
   try {
     const app = initializeApp({
       credential: cert(serviceAccount),
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     });
 
     adminApp = {
@@ -110,6 +111,10 @@ export function getAdminStorage() {
   return app?.storage ?? null;
 }
 
+export function getStorageBucket(): string | null {
+  return process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || null;
+}
+
 const app = requireAdminApp();
 const adminDb = {
   db: app.db,
@@ -126,7 +131,10 @@ export function requireAdminApp(): FirebaseAdminApp {
     }
     throw new Error(
       'Firebase Admin not initialized. Provide either FIREBASE_SERVICE_ACCOUNT_KEY or ' +
-        'FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY environment variables.',
+        'FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY environment variables. ' +
+        'Check that FIREBASE_PROJECT_ID=' +
+        process.env.FIREBASE_PROJECT_ID +
+        ' and has value.',
     );
   }
   return app;

@@ -19,6 +19,7 @@ export {
   useUpdateFlashcard,
   useDeleteFlashcard,
   useReviewFlashcard,
+  useGenerateNlmFlashcards,
   flashcardKeys,
 } from './model/useFlashcards';
 
@@ -48,6 +49,8 @@ export {
   fetchFlashcards,
   fetchFlashcard,
   generateFlashcards,
+  generateNlmFlashcards,
+  getNlmNotebook,
   createFlashcard,
   updateFlashcard,
   deleteFlashcard,

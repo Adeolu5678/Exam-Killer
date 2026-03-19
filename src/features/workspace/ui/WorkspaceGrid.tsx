@@ -45,7 +45,7 @@ export function WorkspaceGrid({ query = {} }: WorkspaceGridProps) {
   // ── Handlers ────────────────────────────────────────────────────
 
   function handleOpen(id: string) {
-    router.push(`/workspace/${id}`);
+    router.push(`/dashboard/workspace/${id}`);
   }
 
   function handleDeleteRequest(id: string) {

@@ -14,7 +14,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { motion } from 'framer-motion';
-import { FileText, Brain, ListChecks, MessageSquare, BarChart3, ChevronRight } from 'lucide-react';
+import {
+  FileText,
+  Brain,
+  ListChecks,
+  MessageSquare,
+  BarChart3,
+  ChevronRight,
+  Sparkles,
+} from 'lucide-react';
 
 import { Skeleton } from '@/shared/ui';
 
@@ -61,6 +69,12 @@ const SUB_NAV_LINKS: SubNavLink[] = [
     label: 'Analytics',
     icon: BarChart3,
     href: (id) => `/dashboard/workspace/${id}/analytics`,
+  },
+  {
+    key: 'studio',
+    label: 'Studio',
+    icon: Sparkles,
+    href: (id) => `/dashboard/workspace/${id}/studio`,
   },
 ];
 
@@ -142,6 +156,7 @@ function SubNavPillGroup({ workspaceId, pathname }: SubNavProps) {
     if (pathname.includes('/quiz')) return 'quizzes';
     if (pathname.includes('/chat')) return 'tutor';
     if (pathname.includes('/analytics')) return 'analytics';
+    if (pathname.includes('/studio')) return 'studio';
     return 'sources';
   }, [pathname]);
 

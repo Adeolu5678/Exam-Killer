@@ -6,10 +6,19 @@
 // =============================================================================
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 import { quizKeys } from './types';
 import type { GenerateQuizPayload, QuizSubmission } from './types';
-import { fetchQuizzes, fetchQuiz, generateQuiz, submitQuiz, deleteQuiz } from '../api/quizzesApi';
+import {
+  fetchQuizzes,
+  fetchQuiz,
+  generateQuiz,
+  submitQuiz,
+  deleteQuiz,
+  generateNlmQuiz,
+  getNlmNotebook,
+} from '../api/quizzesApi';
 
 // ---------------------------------------------------------------------------
 // Read hooks
@@ -80,6 +89,26 @@ export function useDeleteQuiz(workspaceId: string) {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: quizKeys.list(workspaceId) });
+    },
+  });
+}
+
+/** Generate a quiz via NotebookLM */
+export function useGenerateNlmQuiz(workspaceId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const notebook = await getNlmNotebook(workspaceId);
+      if (!notebook) throw new Error('No linked NotebookLM notebook found for this workspace.');
+      return generateNlmQuiz(notebook.notebook_id, workspaceId);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: quizKeys.list(workspaceId) });
+      toast.success('Quiz generated via NLM!');
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'NLM Quiz generation failed');
     },
   });
 }

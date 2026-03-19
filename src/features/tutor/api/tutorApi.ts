@@ -137,3 +137,35 @@ export async function fetchConversationHistory(
     { method: 'GET' },
   );
 }
+
+/**
+ * Sends a query to a NotebookLM notebook.
+ * This is used for high-quality, source-focused AI tutoring.
+ */
+export async function sendNlmQuery(
+  notebookId: string,
+  workspaceId: string,
+  prompt: string,
+): Promise<{ answer: string }> {
+  return apiFetch<{ answer: string }>(`/api/notebooklm/notebooks/${notebookId}/query`, {
+    method: 'POST',
+    body: JSON.stringify({ workspaceId, prompt }),
+  });
+}
+
+/**
+ * Fetches the NLM notebook associated with a workspace.
+ */
+export async function getNlmNotebook(
+  workspaceId: string,
+): Promise<{ notebook_id: string; profile_name: string } | null> {
+  try {
+    return apiFetch<{ notebook_id: string; profile_name: string }>(
+      `/api/notebooklm/notebooks?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { method: 'GET' },
+    );
+  } catch (err: any) {
+    if (err.status === 404) return null;
+    throw err;
+  }
+}

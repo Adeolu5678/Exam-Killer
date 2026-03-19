@@ -341,7 +341,7 @@ export function AppShell({ children, user, subscription }: AppShellProps) {
       {/* Main content area */}
       <main
         id="main-content"
-        className="min-h-screen pt-[var(--topbar-height)] transition-[padding-left] duration-[var(--duration-slow)] ease-[var(--ease-standard)]"
+        className="h-screen overflow-hidden pt-[var(--topbar-height)] transition-[padding-left] duration-[var(--duration-slow)] ease-[var(--ease-standard)]"
         style={{
           paddingLeft: 0,
         }}
@@ -358,7 +358,9 @@ export function AppShell({ children, user, subscription }: AppShellProps) {
             }
           }
         `}</style>
-        <div className="mx-auto max-w-[var(--content-max-width)] p-6">{children}</div>
+        <div className="mx-auto flex h-full max-w-[var(--content-max-width)] flex-col p-6">
+          {children}
+        </div>
       </main>
     </div>
   );

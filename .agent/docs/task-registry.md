@@ -789,10 +789,163 @@ Updated ESLint config to permit intra-feature sub-layer imports.
 
 ---
 
+---
+
+| TASK-040 | NotebookLM: Server-Side MCP Client & Account Pool | ✅ COMPLETED | 2026-03-15 | — |
+| TASK-041 | NotebookLM: Account Router & Usage Tracking | ✅ COMPLETED | 2026-03-15 | — |
+| TASK-042 | NotebookLM: Notebook Management API Routes | ✅ COMPLETED | 2026-03-15 | — |
+| TASK-043 | NotebookLM: Synchronous Generation API Routes | ✅ COMPLETED | 2026-03-15 | — |
+
+---
+
+## 🧱 TASK-040 — NotebookLM: Server-Side MCP Client & Account Pool (P1)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Summary**: Successfully set up the NotebookLM server-side infrastructure.
+
+- **CLI**: Installed `uv` and `notebooklm-mcp-cli` (v0.4.8).
+- **Accounts**: Authenticated 3 Google accounts (`nlm_01`, `nlm_02`, `nlm_03`).
+- **Firestore**: Created and seeded `notebooklm_accounts` pool for quota/rotation management.
+- **Client**: Implemented `NlmMcpClient` in `src/shared/lib/notebooklm/` with full command suite support (create, source-add, query, generate, delete) using corrected v0.4.8 syntax.
+- **Verification**: Zero type errors (`npx tsc --noEmit`) and functional connectivity verified via CLI test automation.
+
+### Summary
+
+Install and configure `notebooklm-mcp-cli` on the backend server. Authenticate all
+NotebookLM Pro Google accounts into named profiles. Create the Firestore
+`notebooklm_accounts` collection schema and seed it with the initial account pool data.
+Build the `NlmMcpClient` service class that can execute CLI commands for any named profile.
+
+---
+
+## 🧱 TASK-041 — NotebookLM: Router Service & Quota Tracker (P1)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Priority**: P1 🟠 HIGH
+**Dependencies**: TASK-040
+**Context file**: `.agent/contexts/TASK-041.md`
+
+### Task Summary (TASK-041)
+
+Build the core load-balancing router: `selectProfile()` (picks lowest-usage active account),
+quota increment helpers, and a Firebase Cloud Scheduled Function that resets daily counters
+at 00:01 UTC. Also creates the `user_notebooks` Firestore collection and all CRUD helpers
+for mapping a student's app account to their NotebookLM notebook + assigned profile.
+
+---
+
+## 🧱 TASK-042 — NotebookLM: Notebook Lifecycle API Routes (P1)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Priority**: P1 🟠 HIGH
+**Dependencies**: TASK-041
+**Context file**: `.agent/contexts/TASK-042.md`
+
+### Task Summary (TASK-042)
+
+Create the Next.js API routes that power the notebook lifecycle:
+
+- `POST /api/notebooklm/notebooks` — creates a new notebook on the selected account, stores mapping in Firestore.
+- `POST /api/notebooklm/notebooks/[notebookId]/sources` — adds a source (URL / PDF / YouTube / Google Drive) to a notebook.
+- `DELETE /api/notebooklm/notebooks/[notebookId]` — deletes the notebook from NotebookLM and removes the Firestore mapping.
+
+---
+
+## 🧱 TASK-043 — NotebookLM: Synchronous Generation API Routes (P1)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Priority**: P1 🟠 HIGH
+**Dependencies**: TASK-042
+**Context file**: `.agent/contexts/TASK-043.md`
+
+### Task Summary (TASK-043)
+
+Create synchronous (fast, <30s) API routes that call NotebookLM and return results in the
+same HTTP response:
+
+- `POST /api/notebooklm/notebooks/[notebookId]/query` — chat / Q&A.
+- `POST /api/notebooklm/notebooks/[notebookId]/generate/flashcards` — native NLM flashcard generation.
+- `POST /api/notebooklm/notebooks/[notebookId]/generate/quiz` — native NLM quiz generation.
+- `POST /api/notebooklm/notebooks/[notebookId]/generate/study-guide` — study guide + FAQ.
+- `POST /api/notebooklm/notebooks/[notebookId]/generate/mind-map` — mind map.
+
+Each route must look up the `assigned_profile_name` from `user_notebooks` and increment the
+account's `daily_queries_used` counter after a successful call.
+
+---
+
+## 🧱 TASK-044 — NotebookLM: Async Job Queue for Long-Running Generations (P1)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Priority**: P1 🟠 HIGH
+**Dependencies**: TASK-043
+**Context file**: `.agent/contexts/TASK-044.md`
+
+### Summary
+
+Implement the async job queue system for long-running NotebookLM outputs (Audio Overview,
+Video Overview, Infographic):
+
+- `POST /api/notebooklm/notebooks/[notebookId]/jobs` — creates a `nlm_jobs` Firestore document (`status: "pending"`), returns `{ job_id }` immediately (202).
+- `GET /api/notebooklm/jobs/[jobId]` — returns current job status and `result_url` when done.
+- Firebase Cloud Function worker (Firestore `onCreate` trigger on `nlm_jobs`) — picks up pending jobs, calls the MCP server, uploads results to Firebase Storage, updates the job document.
+
+The frontend must poll every 15s OR use a Firestore real-time listener. Both patterns must
+be documented in the context file.
+
+---
+
+## 🧱 TASK-045 — NotebookLM: Wire Existing Features to NLM Backend (P1)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Priority**: P1 🟠 HIGH
+**Dependencies**: TASK-043, TASK-044
+**Context file**: `.agent/contexts/TASK-045.md`
+
+### Summary
+
+Integrate the new NLM API routes into the existing Exam-Killer FSD feature modules.
+This is a wiring task — adapting existing UI hooks to call the new endpoints instead of
+(or as an augmentation to) the original OpenAI-based routes:
+
+| Feature module         | Change                                                               |
+| ---------------------- | -------------------------------------------------------------------- |
+| `features/flashcards/` | `useFlashcards` → add option to generate from NLM route              |
+| `features/quizzes/`    | `useGenerateQuiz` → add NLM generation option                        |
+| `features/tutor/`      | `useSendMessage` → route to NLM chat endpoint                        |
+| `features/sources/`    | `useUploadSource` → also push source to NLM notebook                 |
+| `features/workspace/`  | workspace creation → also creates NLM notebook, stores `notebook_id` |
+
+No UI redesign — only hook-level data source wiring.
+
+---
+
+## 🧱 TASK-046 — NotebookLM: Studio Outputs UI (Audio, Video, Infographic) (P2)
+
+**Status**: ✅ COMPLETED — 2026-03-15
+**Priority**: P2 🟡 MEDIUM
+**Dependencies**: TASK-044, TASK-045
+**Context file**: `.agent/contexts/TASK-046.md`
+
+### Summary
+
+Build the new "Studio" tab inside the WorkspaceShell sub-nav for the three long-running,
+premium NotebookLM outputs that don't exist in the current app:
+
+- **Audio Overview player** — async job trigger button, job status polling, HTML5 `<audio>` player once ready.
+- **Video Overview** — async job trigger, status polling, embedded `<video>` or iframe once ready.
+- **Infographic** — async job trigger, status polling, full-page `<img>` with download button.
+
+New route: `src/app/dashboard/workspace/[workspaceId]/studio/page.tsx`.
+New FSD module: `src/features/studio/` (api/, model/, ui/).
+Add "Studio" pill link to `WorkspaceShell` sub-nav.
+
+---
+
 ## 📌 Quick Stats
 
-- **Total Tasks**: 21
+- **Total Tasks**: 46
 - **Pending**: 0
 - **In Progress**: 0
-- **Completed**: 27
+- **Completed**: 46
 - **Blocked**: 0

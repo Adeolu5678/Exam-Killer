@@ -123,3 +123,17 @@ export async function inviteMember(
     body: JSON.stringify(payload),
   });
 }
+
+/**
+ * Create a NotebookLM notebook for a workspace.
+ * This is a secondary action after workspace creation.
+ */
+export async function createNlmNotebook(
+  workspaceId: string,
+  title: string,
+): Promise<{ notebook_id: string }> {
+  return apiFetch<{ notebook_id: string }>('/api/notebooklm/notebooks', {
+    method: 'POST',
+    body: JSON.stringify({ workspaceId, title }),
+  });
+}
