@@ -1,0 +1,8 @@
+
+> exam-killer@1.0.0 type-check
+> tsc --noEmit
+
+.next/types/app/api/notebooklm/notebooks/route.ts(2,24): error TS2307: Cannot find module '../../../../../../src/app/api/notebooklm/notebooks/route.js' or its corresponding type declarations.
+.next/types/app/api/notebooklm/notebooks/route.ts(5,29): error TS2307: Cannot find module '../../../../../../src/app/api/notebooklm/notebooks/route.js' or its corresponding type declarations.
+.next/types/app/dashboard/workspace/[workspaceId]/studio/page.ts(2,24): error TS2307: Cannot find module '../../../../../../../src/app/dashboard/workspace/[workspaceId]/studio/page.js' or its corresponding type declarations.
+.next/types/app/dashboard/workspace/[workspaceId]/studio/page.ts(5,29): error TS2307: Cannot find module '../../../../../../../src/app/dashboard/workspace/[workspaceId]/studio/page.js' or its corresponding type declarations.

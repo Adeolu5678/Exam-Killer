@@ -1,4 +1,4 @@
-import { openai } from '@/shared/lib/openai/client';
+import { getEmbedding } from '@/shared/lib/openai/client';
 
 import { TextChunk } from './chunker';
 
@@ -39,14 +39,8 @@ export async function generateEmbeddings(
     const batch = texts.slice(i, i + batchSize);
 
     try {
-      const response = await openai.embeddings.create({
-        model,
-        input: batch,
-      });
-
-      const batchEmbeddings = response.data
-        .sort((a, b) => a.index - b.index)
-        .map((item) => item.embedding);
+      const promises = batch.map((text) => getEmbedding(text));
+      const batchEmbeddings = await Promise.all(promises);
 
       embeddings.push(...batchEmbeddings);
     } catch (error) {

@@ -229,7 +229,7 @@ export async function rerankResults(
   }
 
   try {
-    const { openai } = await import('@/shared/lib/openai/client');
+    const { getChatCompletion } = await import('@/shared/lib/openai/client');
 
     const scoringPrompt = `Rate the relevance of each chunk to the following query on a scale of 0-10.
 Query: "${query}"
@@ -239,13 +239,10 @@ ${chunks.map((chunk, i) => `${i + 1}. ${chunk.content.slice(0, 500)}`).join('\n\
 
 Respond with only a JSON array of scores in order, like: [8, 5, 9, 3, ...]`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: scoringPrompt }],
+    const content = await getChatCompletion([{ role: 'user', content: scoringPrompt }], {
       temperature: 0,
     });
 
-    const content = response.choices[0]?.message?.content;
     const scores = JSON.parse(content || '[]');
 
     const scoredChunks = chunks.map((chunk, i) => ({

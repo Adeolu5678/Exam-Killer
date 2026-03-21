@@ -7,6 +7,23 @@ import {
 
 const DEFAULT_INDEX_NAME = 'exam-killer';
 
+/**
+ * ⚠️  ACTION REQUIRED: Pinecone Index Recreation
+ *
+ * The embedding model has changed from text-embedding-3-small (1536 dims)
+ * to Gemini text-embedding-004 (768 dims). The Pinecone index dimension
+ * cannot be changed in-place.
+ *
+ * MANUAL STEPS (one-time, done once by the project owner):
+ * 1. Go to https://app.pinecone.io
+ * 2. Delete the existing 'exam-killer' index
+ * 3. Create a new index named 'exam-killer' with:
+ *    - Dimensions: 768
+ *    - Metric: cosine
+ *    - Cloud: your current cloud/region settings
+ * 4. Existing embeddings will be lost (users' uploaded sources
+ *    will need to be re-processed — trigger re-processing from the UI).
+ */
 let pineconeClient: Pinecone | null = null;
 
 export interface VectorMetadata {

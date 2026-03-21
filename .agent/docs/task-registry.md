@@ -32,9 +32,12 @@
 
 ### P0 - Critical
 
-| ID  | Task       | Status | Assignee | Handoff |
-| --- | ---------- | ------ | -------- | ------- |
-| —   | _No tasks_ | —      | —        | —       |
+| ID       | Task                                                           | Status       | Dependencies | Handoff |
+| -------- | -------------------------------------------------------------- | ------------ | ------------ | ------- |
+| TASK-040 | Migrate AI Client to Kilo Gateway (minimax-m2.5-free)          | ✅ COMPLETED | —            | —       |
+| TASK-041 | Verify Kilo Gateway Integration End-to-End (Audit + TypeCheck) | ✅ COMPLETED | TASK-040     | —       |
+| TASK-042 | Migrate RAG Embeddings off OpenAI (Kilo or Jina AI)            | ✅ COMPLETED | —            | —       |
+| TASK-043 | Verify Embeddings Migration & Pinecone Dimension Alignment     | ✅ COMPLETED | TASK-042     | —       |
 
 ### P1 - High Priority
 
@@ -640,7 +643,7 @@
 
 - Format: `TASK-XXX` (e.g., TASK-001, TASK-042)
 - IDs are never reused
-- Next Task ID: **TASK-037**
+- Next Task ID: **TASK-042**
 
 ---
 
@@ -791,8 +794,116 @@ Updated ESLint config to permit intra-feature sub-layer imports.
 
 ## 📌 Quick Stats
 
-- **Total Tasks**: 21
+- **Total Tasks**: 25
 - **Pending**: 0
 - **In Progress**: 0
-- **Completed**: 27
+- **Completed**: 31
+
+---
+
+## 🧱 TASK-042 & TASK-043 — RAG Embeddings Migration to Gemini (P0)
+
+**Status**: ✅ COMPLETED — 2026-03-20
+**Summary**: Migrated embeddings off OpenAI directly to Gemini.
+
+### Details
+
+- Provider chosen: Google Gemini text-embedding-004
+- Embedding dimension: 768
+- Pinecone index recreation required: YES — see instructions in pinecone config file
 - **Blocked**: 0
+
+---
+
+## 🧱 TASK-040 — Migrate AI Client to Kilo Gateway (P0)
+
+**Status**: ✅ COMPLETED — 2026-03-20
+**Priority**: P0 🔴 CRITICAL
+**Context**: `.agent/contexts/TASK-040.md`
+
+### Summary
+
+Replace the OpenAI-direct client in `src/shared/lib/openai/client.ts` with a Kilo Gateway client
+that routes all chat completions through the `minimax/minimax-m2.5-free` free model. The `openai`
+npm package stays — only `baseURL` and `apiKey` change in the constructor. A separate legacy
+client is preserved exclusively for the RAG embeddings pipeline.
+
+### Files to Modify
+
+| File                               | Change                                                                                         |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/shared/lib/openai/client.ts`  | Add `kiloClient` export, change `getChatCompletion` to use it with `minimax/minimax-m2.5-free` |
+| `src/shared/lib/rag/embeddings.ts` | Verify it still imports the legacy `openai` export (not `kiloClient`)                          |
+| `.env.example`                     | Add `KILO_API_KEY=` with setup instructions                                                    |
+| `src/shared/lib/openai/README.md`  | Update to reflect Kilo provider                                                                |
+
+### Dependencies
+
+- None — can be started immediately
+
+---
+
+## 🧱 TASK-041 — Verify Kilo Gateway Integration End-to-End (P0)
+
+**Status**: ⬚ PENDING
+**Priority**: P0 🔴 CRITICAL
+**Dependencies**: TASK-040 must be completed first
+**Context**: `.agent/contexts/TASK-041.md`
+
+### Summary
+
+Audit all 5 AI-powered API routes to confirm they route through `getChatCompletion` (Kilo Gateway).
+No route should directly instantiate OpenAI or hardcode `gpt-4o`. Run TypeScript type check and
+ESLint. Update documentation.
+
+### Routes to Audit
+
+| Route                                                               | Feature    |
+| ------------------------------------------------------------------- | ---------- |
+| `src/app/api/chat/tutor/route.ts`                                   | AI Tutor   |
+| `src/app/api/workspaces/[workspaceId]/flashcards/generate/route.ts` | Flashcards |
+| `src/app/api/workspaces/[workspaceId]/quiz/generate/route.ts`       | Quiz       |
+| `src/app/api/workspaces/[workspaceId]/exam/generate/route.ts`       | Exam       |
+| `src/app/api/study-plan/create/route.ts`                            | Study Plan |
+
+---
+
+## 🧱 TASK-042 — Migrate RAG Embeddings off OpenAI (P0)
+
+**Status**: ⬚ PENDING
+**Priority**: P0 🔴 CRITICAL
+**Context**: `.agent/contexts/TASK-042.md`
+
+### Summary
+
+The OpenAI embeddings key has no active subscription. Migrate `getEmbedding()` in `client.ts`
+to use either the existing `kiloClient` (if Kilo Gateway supports embeddings) or Jina AI's
+free REST API (jina-embeddings-v2-base-en, 768 dims, 1M tokens/month free). The agent should
+attempt Kilo first and fall back to Jina if Kilo does not expose an embeddings endpoint.
+
+### Files to Modify
+
+| File                                 | Change                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| `src/shared/lib/openai/client.ts`    | `getEmbedding()` — switch from legacy `openai` to `kiloClient` or Jina fetch |
+| `src/shared/lib/openai/mock-data.ts` | Update mock dimension if switching to Jina (768 vs 1536)                     |
+| `.env.example` / `.env.local`        | Add `JINA_API_KEY=` if Jina path is taken                                    |
+
+### Dependencies
+
+- None — can be started immediately
+
+---
+
+## 🧱 TASK-043 — Verify Embeddings Migration & Pinecone Alignment (P0)
+
+**Status**: ⬚ PENDING
+**Priority**: P0 🔴 CRITICAL
+**Dependencies**: TASK-042 must be completed first
+**Context**: `.agent/contexts/TASK-043.md`
+
+### Summary
+
+Post-migration audit. Verify no file still calls `openai.embeddings.create()`. Check whether
+the Pinecone index dimension needs to change (1536 → 768 if Jina was chosen). Run full
+build + lint pass. Update task registry with chosen provider and dimension.

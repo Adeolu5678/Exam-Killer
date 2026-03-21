@@ -1,4 +1,4 @@
-const MOCK_MODE_ENABLED = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'mock';
+const MOCK_MODE_ENABLED = !process.env.KILO_API_KEY || process.env.KILO_API_KEY === 'mock';
 
 const MOCK_FLASHCARDS = `[
   {"front": "What is the capital of France?", "back": "Paris", "tags": ["geography", "europe"]},
@@ -31,9 +31,9 @@ const MOCK_SUMMARY = `{
   ]
 }`;
 
-const MOCK_TUTOR_RESPONSE = `Hello! I'm currently running in demo mode since OpenAI is not configured. This means you're seeing sample responses to help you understand how the AI tutoring feature works. 
+const MOCK_TUTOR_RESPONSE = `Hello! I'm currently running in demo mode since Kilo Gateway is not configured. This means you're seeing sample responses to help you understand how the AI tutoring feature works. 
 
-To enable full AI capabilities, please configure your OpenAI API key in the environment variables. Once configured, I'll be able to provide personalized tutoring, answer questions about your study materials, and offer tailored learning assistance based on your specific needs.
+To enable full AI capabilities, please configure your Kilo Gateway API key in the environment variables. Once configured, I'll be able to provide personalized tutoring, answer questions about your study materials, and offer tailored learning assistance based on your specific needs.
 
 Feel free to explore the demo features in the meantime!`;
 
@@ -54,7 +54,7 @@ export function getMockTutorResponse(): string {
 }
 
 export function getMockEmbedding(): number[] {
-  return Array(1536)
+  return Array(768)
     .fill(0)
     .map(() => Math.random() * 2 - 1);
 }

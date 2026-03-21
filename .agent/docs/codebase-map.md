@@ -175,3 +175,12 @@ project-root/
 ---
 
 > ⚠️ **MAINTENANCE**: When adding new directories or key files, UPDATE THIS MAP.
+
+---
+
+## ⚠️ Infrastructure Notes
+
+**Pinecone Index Dimension Change (2026-03-20)**:
+The embedding model changed to Gemini text-embedding-004 (768 dims).
+The `exam-killer` Pinecone index must be manually deleted and recreated at 768 dimensions.
+See the comment in `src/shared/lib/rag/vector-store.ts` for exact steps.

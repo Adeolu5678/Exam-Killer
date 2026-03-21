@@ -6,7 +6,7 @@
 
 Exam-Killer is an intelligent study platform designed to transform how Nigerian university students prepare for exams. Modeled after tools like NotebookLM, it allows students to create Study Workspaces where they can upload PDFs, lecture notes, and past questions, then instantly generate AI-powered learning tools.
 
-Starting with University of Ibadan students, the platform combines the power of GPT-4o with proven learning techniques like spaced repetition to make studying more effective and engaging. Students get a personal AI tutor that adapts to their learning style, whether they need a patient mentor, a no-nonsense drill sergeant, or an encouraging peer.
+Starting with University of Ibadan students, the platform combines the power of Kilo Gateway (Minimax m2.5-free) with proven learning techniques like spaced repetition to make studying more effective and engaging. Students get a personal AI tutor that adapts to their learning style, whether they need a patient mentor, a no-nonsense drill sergeant, or an encouraging peer.
 
 The core value proposition is simple: upload any study material and get AI-generated flashcards, practice quizzes, and a personal tutor that actually understands your course content. No more generic study apps—Exam-Killer learns from your materials and helps you master them.
 
@@ -22,18 +22,18 @@ The core value proposition is simple: upload any study material and get AI-gener
 
 ## Tech Stack
 
-| Layer           | Technology                           |
-| --------------- | ------------------------------------ |
-| Frontend        | Next.js 14, Tailwind CSS, TypeScript |
-| Backend         | Next.js API Routes                   |
-| Database        | Firebase Firestore                   |
-| Auth            | Firebase Authentication              |
-| AI/LLM          | OpenAI GPT-4o, Embeddings            |
-| Vector Store    | Pinecone                             |
-| File Processing | LangChain                            |
-| Payments        | Paystack                             |
-| Hosting         | Vercel                               |
-| Mobile (Future) | Flutter                              |
+| Layer           | Technology                                |
+| --------------- | ----------------------------------------- |
+| Frontend        | Next.js 14, Tailwind CSS, TypeScript      |
+| Backend         | Next.js API Routes                        |
+| Database        | Firebase Firestore                        |
+| Auth            | Firebase Authentication                   |
+| AI/LLM          | Kilo Gateway (Minimax), OpenAI Embeddings |
+| Vector Store    | Pinecone                                  |
+| File Processing | LangChain                                 |
+| Payments        | Paystack                                  |
+| Hosting         | Vercel                                    |
+| Mobile (Future) | Flutter                                   |
 
 ## Getting Started
 

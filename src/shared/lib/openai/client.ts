@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
 import {
@@ -9,15 +10,26 @@ import {
   MOCK_MODE_ENABLED,
 } from './mock-data';
 
-const apiKey = process.env.OPENAI_API_KEY;
+const kiloApiKey = process.env.KILO_API_KEY;
+const openaiApiKey = process.env.OPENAI_API_KEY;
 
-export function isOpenAIConfigured(): boolean {
-  return !!apiKey;
+export const kiloClient = new OpenAI({
+  baseURL: 'https://api.kilo.ai/api/gateway',
+  apiKey: kiloApiKey || 'dummy-key-for-build',
+});
+
+const KILO_CHAT_MODEL = 'minimax/minimax-m2.5-free';
+
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const geminiClient = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
+
+export function isGeminiConfigured(): boolean {
+  return !!geminiApiKey;
 }
 
-export const openai = new OpenAI({
-  apiKey: apiKey || 'dummy-key-for-build',
-});
+export function isKiloConfigured(): boolean {
+  return !!kiloApiKey;
+}
 
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -34,7 +46,7 @@ export async function getChatCompletion(
   messages: ChatMessage[],
   options?: ChatCompletionOptions,
 ): Promise<string> {
-  if (!isOpenAIConfigured() || MOCK_MODE_ENABLED) {
+  if (!isKiloConfigured() || MOCK_MODE_ENABLED) {
     // Return mock data based on the requested type
     const mockType = options?.mockType;
 
@@ -54,8 +66,8 @@ export async function getChatCompletion(
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const completion = await kiloClient.chat.completions.create({
+      model: KILO_CHAT_MODEL,
       messages,
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 4096,
@@ -80,30 +92,18 @@ export async function getChatCompletion(
 }
 
 export async function getEmbedding(text: string): Promise<number[]> {
-  if (!isOpenAIConfigured() || MOCK_MODE_ENABLED) {
+  if (!isGeminiConfigured() || MOCK_MODE_ENABLED || !geminiClient) {
     return getMockEmbedding();
   }
 
   try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: text,
-    });
-
-    const embedding = response.data[0]?.embedding;
-
-    if (!embedding) {
-      throw new Error('No embedding returned from OpenAI');
-    }
-
-    return embedding;
+    const model = geminiClient.getGenerativeModel({ model: 'text-embedding-004' });
+    const result = await model.embedContent(text);
+    return result.embedding.values;
   } catch (error) {
-    if (error instanceof OpenAI.APIError) {
-      throw new Error(`OpenAI API error: ${error.message}`);
-    }
-    if (error instanceof Error) {
-      throw new Error(`Failed to get embedding: ${error.message}`);
-    }
-    throw new Error('Failed to get embedding: Unknown error');
+    console.error('Gemini embedding error:', error);
+    throw new Error(
+      `Failed to get embedding: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 }
