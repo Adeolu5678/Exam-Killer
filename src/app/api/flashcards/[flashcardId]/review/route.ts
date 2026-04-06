@@ -11,6 +11,7 @@ import { calculateNextReview } from '@/shared/lib/spaced-repetition';
 
 interface ReviewBody {
   rating: number;
+  quality?: number;
 }
 
 interface FlashcardData {
@@ -46,7 +47,7 @@ export const POST = withAuth(async (request, { db, userId }) => {
     return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
   }
 
-  const { rating } = body;
+  const rating = body.rating ?? body.quality;
 
   if (rating === undefined || rating < 0 || rating > 5) {
     return errorResponse('Rating must be between 0 and 5', StatusCodes.BAD_REQUEST);
@@ -104,7 +105,7 @@ export const POST = withAuth(async (request, { db, userId }) => {
   const updatedData = updatedDoc.data() as FlashcardData | undefined;
 
   return successResponse({
-    flashcard: {
+    updated: {
       id: flashcardId,
       front: updatedData?.front ?? '',
       back: updatedData?.back ?? '',

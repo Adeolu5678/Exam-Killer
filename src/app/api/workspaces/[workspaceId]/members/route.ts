@@ -64,6 +64,21 @@ export const GET = withAuth(async (request: NextRequest, { db, userId }) => {
     return errorResponse('Workspace not found', StatusCodes.NOT_FOUND);
   }
 
+  const isOwner = workspaceData.user_id === userId;
+
+  const memberCheckSnapshot = await db
+    .collection('workspace_members')
+    .where('workspace_id', '==', workspaceId)
+    .where('user_id', '==', userId)
+    .limit(1)
+    .get();
+
+  const isMember = !memberCheckSnapshot.empty;
+
+  if (!isOwner && !isMember && !workspaceData.is_public) {
+    return errorResponse('Access denied', StatusCodes.FORBIDDEN);
+  }
+
   const membersSnapshot = await db
     .collection('workspace_members')
     .where('workspace_id', '==', workspaceId)

@@ -34,7 +34,7 @@ export const GET = withAuth(async (request: NextRequest, context: AuthContext) =
       .limit(1)
       .get();
 
-    if (memberDoc.empty && workspaceData?.owner_id !== userId) {
+    if (memberDoc.empty && workspaceData?.user_id !== userId) {
       return errorResponse('Access denied', StatusCodes.FORBIDDEN);
     }
 

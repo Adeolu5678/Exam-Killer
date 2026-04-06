@@ -1,0 +1,287 @@
+# Refactored Prompt: Migrate All AI Inference from Kilo Gateway → Google Gemini API
+
+> **Objective**: Replace the Kilo Gateway (and OpenAI fallback) with Google's Gemini API as the **sole AI provider** for text generation, image generation, audio/TTS, and embeddings — all routed through a single API key.
+
+---
+
+## 1. Environment Configuration
+
+### 1.1 Update [.env.local](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/.env.local)
+
+Add the new unified key and deprecation marker:
+
+```env
+# ===========================================
+# Google Gemini Configuration (Unified — ALL AI features)
+# Covers: text generation, image generation, audio/TTS, embeddings
+# ===========================================
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+```
+
+- **Remove** or **comment out** `KILO_API_KEY` and `OPENAI_API_KEY` — they are now deprecated and should no longer be read by any runtime code.
+- Keep `PINECONE_*` keys intact (vector store is unchanged).
+
+### 1.2 Update [.env.example](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/.env.example)
+
+Replace the Kilo and OpenAI sections with:
+
+```env
+# Google Gemini (Unified AI provider — text, image, audio, embeddings)
+# Get key from: https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=
+```
+
+Remove the `KILO_API_KEY=` and `OPENAI_API_KEY=` placeholder lines.
+
+---
+
+## 2. Model Routing Table
+
+All inference goes through the `@google/generative-ai` SDK (already installed at `^0.24.1`). Use these models:
+
+| Capability | Model ID | Notes |
+|---|---|---|
+| **Text generation** (chat, quiz gen, flashcard gen, study plans, tutor, reranking) | `gemini-2.0-flash-lite` | Fast, cheap. Used for all structured text output. |
+| **Image generation** | `gemini-2.0-flash-exp` (Imagen via Gemini) | Gemini's native image generation endpoint. Exact model slug TBD — use `gemini-2.0-flash-exp` with `responseModalities: ['IMAGE']` or the Imagen 3 endpoint if the SDK supports it. Verify SDK support before implementing. |
+| **Audio / TTS** | `gemini-2.5-pro-preview-tts` | Text-to-speech. Subject to change for cheaper alternatives. Wrap in an abstraction so the model ID is easily swappable. |
+| **Embeddings** (RAG pipeline) | `gemini-embedding-exp-03-07` (or current `text-embedding-004`) | **No functional change needed** — embeddings already route through Gemini via [getEmbedding()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#203-250) in [client.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts). Simply ensure the env var `GEMINI_API_KEY` is now the new key value. The embedding model and code path remain as-is. |
+
+---
+
+## 3. Refactoring Plan — File-by-File
+
+### 3.1 [src/shared/lib/openai/client.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts) (PRIMARY — Breaking Change)
+
+This is the central AI client module. It currently exports `kiloClient`, [getChatCompletion](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120), [streamChatCompletion](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#132-202), [getCandidateKiloModels](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#121-131), [isKiloConfigured](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#31-35), [getEmbedding](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#203-250), and `geminiClient`.
+
+**Changes:**
+
+1. **Remove** all Kilo-related code:
+   - Delete `KILO_API_KEY`, `OPENAI_API_KEY` constants
+   - Delete the `_kiloClient` / `kiloClient` OpenAI SDK instance
+   - Delete `KILO_CHAT_MODEL`, [getCandidateKiloModels()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#121-131)
+   - Delete [isKiloConfigured()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#31-35)
+
+2. **Remove** the `openai` npm dependency import. After migration, the `openai` package can be uninstalled from [package.json](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/package.json).
+
+3. **Rewrite [getChatCompletion()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120)** to use the Gemini SDK:
+   ```typescript
+   import { GoogleGenerativeAI } from '@google/generative-ai';
+
+   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+   const geminiClient = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+
+   const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-lite';
+
+   export async function getChatCompletion(
+     messages: ChatMessage[],
+     options?: ChatCompletionOptions,
+   ): Promise<string> {
+     if (MOCK_MODE_ENABLED) { /* existing mock logic */ }
+     if (!geminiClient) throw new Error('GEMINI_API_KEY not configured');
+
+     const model = geminiClient.getGenerativeModel({
+       model: GEMINI_TEXT_MODEL,
+       generationConfig: {
+         temperature: options?.temperature ?? 0.7,
+         maxOutputTokens: options?.maxTokens ?? 4096,
+       },
+     });
+
+     // Convert ChatMessage[] to Gemini's format:
+     // - system message → systemInstruction
+     // - user/assistant → contents array with role 'user'/'model'
+     const systemMsg = messages.find(m => m.role === 'system');
+     const chatMessages = messages
+       .filter(m => m.role !== 'system')
+       .map(m => ({
+         role: m.role === 'assistant' ? 'model' : 'user',
+         parts: [{ text: m.content }],
+       }));
+
+     const chat = model.startChat({
+       history: chatMessages.slice(0, -1),
+       ...(systemMsg ? { systemInstruction: systemMsg.content } : {}),
+     });
+
+     const lastMsg = chatMessages[chatMessages.length - 1];
+     const result = await chat.sendMessage(lastMsg.parts[0].text);
+     const text = result.response.text();
+     if (!text) throw new Error('No content returned from Gemini');
+     return text;
+   }
+   ```
+
+4. **Rewrite [streamChatCompletion()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#132-202)** to use Gemini's streaming API:
+   ```typescript
+   export async function streamChatCompletion(
+     messages: ChatMessage[],
+     options?: { temperature?: number; maxTokens?: number },
+   ): Promise<ReadableStream<Uint8Array>> {
+     if (!geminiClient) throw new Error('GEMINI_API_KEY not configured');
+
+     const model = geminiClient.getGenerativeModel({
+       model: GEMINI_TEXT_MODEL,
+       generationConfig: {
+         temperature: options?.temperature ?? 0.7,
+         maxOutputTokens: options?.maxTokens ?? 4096,
+       },
+     });
+
+     // Same message conversion as above...
+     const result = await chat.sendMessageStream(lastMsg.parts[0].text);
+
+     // Convert Gemini's AsyncIterable to a web ReadableStream<Uint8Array>
+     const encoder = new TextEncoder();
+     return new ReadableStream({
+       async start(controller) {
+         for await (const chunk of result.stream) {
+           const text = chunk.text();
+           if (text) controller.enqueue(encoder.encode(text));
+         }
+         controller.close();
+       },
+     });
+   }
+   ```
+   > **Important**: The return type changes from [Response](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/chat/tutor/route.ts#55-60) to `ReadableStream<Uint8Array>`. Update all call sites accordingly (see §3.3).
+
+5. **Rename exports** for clarity:
+   - [isKiloConfigured()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#31-35) → `isAIConfigured()` (checks `!!GEMINI_API_KEY`)
+   - Export `GEMINI_TEXT_MODEL` for debug routes
+
+6. **[getEmbedding()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#203-250)** — Minimal change:
+   - Remove the OpenAI/Kilo fallback branch (lines 234–246). Only Gemini path + mock remain.
+   - The Gemini embedding path (lines 214–232) stays as-is.
+
+7. **Export a new `isAIConfigured()` function:**
+   ```typescript
+   export function isAIConfigured(): boolean {
+     return !!GEMINI_API_KEY;
+   }
+   ```
+
+---
+
+### 3.2 [src/shared/lib/openai/mock-data.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/mock-data.ts)
+
+Update `MOCK_MODE_ENABLED` to only check `GEMINI_API_KEY`:
+
+```typescript
+const MOCK_MODE_ENABLED =
+  process.env.GEMINI_API_KEY === 'mock' ||
+  !process.env.GEMINI_API_KEY;
+```
+
+Remove references to `KILO_API_KEY` and `OPENAI_API_KEY`.
+
+---
+
+### 3.3 [src/app/api/chat/tutor/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/chat/tutor/route.ts)
+
+- Replace `import { getChatCompletion, streamChatCompletion } from '@/shared/lib/openai/client'`
+  - The [streamChatCompletion](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#132-202) return type changes from [Response](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/chat/tutor/route.ts#55-60) to `ReadableStream<Uint8Array>`. Update lines ~125–134:
+    ```typescript
+    // OLD: const kiloRes = await streamChatCompletion(...);
+    //      if (!kiloRes.body) throw ...;
+    //      const reader = kiloRes.body.getReader();
+    // NEW:
+    const stream = await streamChatCompletion(prompt.messages, { ... });
+    const reader = stream.getReader();
+    ```
+  - Remove all comments referencing "Kilo" (lines 113, 131, 146, 196).
+
+---
+
+### 3.4 [src/shared/lib/rag/retriever.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/rag/retriever.ts) (line 232–233)
+
+- Remove `const { kiloClient: openai } = await import(...)` and `const KILO_CHAT_MODEL = 'minimax/minimax-m2.5-free'`
+- The [rerankResults](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/rag/retriever.ts#216-264) function already calls [getChatCompletion()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120) on line 243 (which will now route through Gemini). Just delete the unused Kilo imports on lines 232–233.
+
+---
+
+### 3.5 Debug Routes (can be deleted or updated)
+
+These routes are Kilo-specific and should be refactored or removed:
+
+| File | Action |
+|---|---|
+| [src/app/api/debug/kilo-test/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/debug/kilo-test/route.ts) | **Delete** or rename to `gemini-test` and rewrite to test [getChatCompletion](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120) |
+| [src/app/api/debug/kilo-models/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/debug/kilo-models/route.ts) | **Delete** — model listing via Kilo API is irrelevant |
+| [src/app/api/debug/trigger-tutor/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/debug/trigger-tutor/route.ts) | Replace [isKiloConfigured](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#31-35) → `isAIConfigured` |
+| [src/app/api/debug/embed-test/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/debug/embed-test/route.ts) | No change needed (already uses Gemini) |
+
+---
+
+### 3.6 Generation Routes (consumers of [getChatCompletion](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120))
+
+These files import [getChatCompletion](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120) and require **zero code changes** (the function signature is unchanged):
+
+- [src/app/api/workspaces/[workspaceId]/quiz/generate/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/workspaces/%5BworkspaceId%5D/quiz/generate/route.ts)
+- [src/app/api/workspaces/[workspaceId]/flashcards/generate/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/workspaces/%5BworkspaceId%5D/flashcards/generate/route.ts)
+- [src/app/api/workspaces/[workspaceId]/exam/generate/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/workspaces/%5BworkspaceId%5D/exam/generate/route.ts)
+- [src/app/api/study-plan/create/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/study-plan/create/route.ts)
+
+Verify they compile and work after the client refactor. No import changes needed.
+
+---
+
+### 3.7 Future: Image & Audio Stubs
+
+Image generation and audio/TTS are **not currently implemented** in the codebase (the Studio page has an "Audio Overview" placeholder but no backend). These are **new features** to be built later. For now:
+
+- Add model ID constants to [client.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts) for future use:
+  ```typescript
+  export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
+  export const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-pro-preview-tts';
+  ```
+- Add corresponding env var placeholders to [.env.example](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/.env.example):
+  ```env
+  # Optional: Override default Gemini model slugs
+  # GEMINI_TEXT_MODEL=gemini-2.0-flash-lite
+  # GEMINI_IMAGE_MODEL=gemini-2.0-flash-exp
+  # GEMINI_TTS_MODEL=gemini-2.5-pro-preview-tts
+  # GEMINI_EMBEDDING_MODEL=gemini-embedding-exp-03-07
+  ```
+
+---
+
+## 4. Dependency Cleanup
+
+After all code changes:
+
+```bash
+npm uninstall openai
+```
+
+The `openai` npm package is no longer needed. Verify no remaining imports reference it.
+
+---
+
+## 5. Verification Checklist
+
+After implementation, confirm:
+
+- [ ] `npm run build` passes with zero errors
+- [ ] `npm run lint` passes with zero warnings
+- [ ] [.env.local](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/.env.local) has only `GEMINI_API_KEY` for AI (no `KILO_*` or `OPENAI_*`)
+- [ ] Mock mode still works when `GEMINI_API_KEY` is set to `'mock'` or missing
+- [ ] [getChatCompletion()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#52-120) returns valid text from `gemini-2.0-flash-lite`
+- [ ] [streamChatCompletion()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#132-202) returns a working `ReadableStream` for the tutor
+- [ ] [getEmbedding()](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts#203-250) returns valid vectors from Gemini (unchanged behavior)
+- [ ] All generation routes (quiz, flashcard, exam, study-plan) produce valid output
+- [ ] Tutor chat works in both streaming and non-streaming modes
+- [ ] Debug route `/api/debug/embed-test` still works
+- [ ] No runtime references to `kilo.ai`, `KILO_API_KEY`, or `openai` SDK remain
+
+---
+
+## 6. Execution Order
+
+1. **Phase 1 — Environment**: Update [.env.local](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/.env.local) and [.env.example](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/.env.example)
+2. **Phase 2 — Core client**: Rewrite [src/shared/lib/openai/client.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/client.ts)
+3. **Phase 3 — Mock data**: Update [src/shared/lib/openai/mock-data.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/openai/mock-data.ts)
+4. **Phase 4 — Call sites**: Fix [tutor/route.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/app/api/chat/tutor/route.ts) (stream return type), [retriever.ts](file:///c:/Projects/ApplicationDevelopment/Exam-Killer/src/shared/lib/rag/retriever.ts) (dead imports)
+5. **Phase 5 — Debug routes**: Delete/rewrite Kilo debug routes
+6. **Phase 6 — Cleanup**: `npm uninstall openai`, verify build + lint
+7. **Phase 7 — Smoke test**: Run dev server, test tutor chat + quiz generation end-to-end

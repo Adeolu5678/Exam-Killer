@@ -28,7 +28,7 @@ export async function fetchAggregatedStats(workspaceId: string): Promise<Aggrega
   const url =
     workspaceId === 'global'
       ? '/api/analytics/global/stats'
-      : `/api/analytics/${workspaceId}/stats`;
+      : `/api/analytics/workspace/${workspaceId}/stats`;
   return apiFetch<AggregatedStats>(url);
 }
 
@@ -42,7 +42,7 @@ export async function fetchProgressData(
   const url =
     workspaceId === 'global'
       ? `/api/analytics/global/progress?days=${days}`
-      : `/api/analytics/${workspaceId}/progress?days=${days}`;
+      : `/api/analytics/workspace/${workspaceId}/progress?days=${days}`;
   return apiFetch<ProgressDataPoint[]>(url);
 }
 
@@ -53,6 +53,6 @@ export async function fetchStreakData(workspaceId: string): Promise<StreakDay[]>
   const url =
     workspaceId === 'global'
       ? '/api/analytics/global/streak'
-      : `/api/analytics/${workspaceId}/streak`;
+      : `/api/analytics/workspace/${workspaceId}/streak`;
   return apiFetch<StreakDay[]>(url);
 }

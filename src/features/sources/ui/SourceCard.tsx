@@ -73,7 +73,12 @@ export function SourceCard({ source, onDelete, onReprocess, isDeleting = false }
   });
 
   return (
-    <article className={styles.card} aria-label={`Source: ${source.file_name}`}>
+    <article
+      id={`source-card-${source.id}`}
+      className={styles.card}
+      aria-label={`Source: ${source.file_name}`}
+      tabIndex={-1}
+    >
       {/* Icon */}
       <SourceIcon type={source.type} />
 

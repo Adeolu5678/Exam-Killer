@@ -15,12 +15,7 @@ export { QuizEmptyState } from './ui/QuizEmptyState';
 export { QuizRowSkeleton, QuizListSkeleton } from './ui/QuizSkeleton';
 
 // ── TanStack Query hooks ────────────────────────────────────────────────────
-export {
-  useGenerateQuiz,
-  useGenerateNlmQuiz,
-  useSubmitQuiz,
-  useDeleteQuiz,
-} from './model/useQuizzes';
+export { useGenerateQuiz, useSubmitQuiz, useDeleteQuiz } from './model/useQuizzes';
 
 // ── Zustand store ────────────────────────────────────────────────────────────
 export { useQuizzesStore } from './model/quizzesStore';
@@ -40,12 +35,4 @@ export type {
 export { generateQuizSchema, quizKeys, getScoreColor, DIFFICULTY_LABELS } from './model/types';
 
 // ── API functions (for advanced consumers) ───────────────────────────────────
-export {
-  fetchQuizzes,
-  fetchQuiz,
-  generateQuiz,
-  submitQuiz,
-  deleteQuiz,
-  generateNlmQuiz,
-  getNlmNotebook,
-} from './api/quizzesApi';
+export { fetchQuizzes, fetchQuiz, generateQuiz, submitQuiz, deleteQuiz } from './api/quizzesApi';

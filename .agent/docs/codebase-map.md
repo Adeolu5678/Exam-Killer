@@ -63,6 +63,7 @@ project-root/
 | `/dashboard/workspace/[workspaceId]/chat/page.tsx`       | AI Tutor chat                   |
 | `/dashboard/workspace/[workspaceId]/flashcards/page.tsx` | Flashcards feature              |
 | `/dashboard/workspace/[workspaceId]/quiz/page.tsx`       | Quiz practice                   |
+| `/dashboard/workspace/[workspaceId]/studio/page.tsx`     | Studio Coming Soon page         |
 | `/dashboard/workspace/[workspaceId]/exam/page.tsx`       | Exam simulator                  |
 | `/dashboard/analytics/page.tsx`                          | Analytics dashboard             |
 | `/study-plan/page.tsx`                                   | Study plan page                 |

@@ -5,9 +5,10 @@
 // FSD-compliant global analytics page.
 // =============================================================================
 
-import { useState, useEffect } from 'react';
-
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+
+import { useAuth } from '@/shared/hooks/useAuth';
 
 import { AnalyticsPageSkeleton } from '@/features/analytics';
 import { VerificationBanner } from '@/features/identity/VerificationBanner';
@@ -23,22 +24,8 @@ const AnalyticsPageShell = dynamic(
 );
 
 export default function GlobalAnalyticsPage() {
-  const [subscription, setSubscription] = useState<any>(null);
-
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch('/api/payments/status');
-        if (res.ok) {
-          const data = await res.json();
-          setSubscription(data.subscription);
-        }
-      } catch (err) {
-        console.error('Failed to fetch subscription status');
-      }
-    };
-    fetchStatus();
-  }, []);
+  const { subscription } = useAuth();
+  const router = useRouter();
 
   const vStatus = subscription?.verificationStatus || 'none';
 
@@ -46,7 +33,10 @@ export default function GlobalAnalyticsPage() {
     <VerificationGuard status={vStatus}>
       <div className="p-6">
         <div className="mb-6">
-          <VerificationBanner status={vStatus} onVerifyClick={() => {}} />
+          <VerificationBanner
+            status={vStatus}
+            onVerifyClick={() => router.push('/dashboard/settings')}
+          />
         </div>
         <AnalyticsPageShell workspaceId="global" />
       </div>

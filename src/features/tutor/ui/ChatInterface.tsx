@@ -59,13 +59,15 @@ export function ChatInterface({
     selectedPersonality,
   } = useTutorStore();
 
-  const { messages, isLoadingHistory, loadHistory, appendMessage, updateMessage } =
+  const { messages, isLoadingHistory, loadHistory, appendMessage, updateMessage, removeMessage } =
     useConversation(workspaceId);
 
   const { sendMessage } = useSendMessage({
     workspaceId,
+    messages,
     appendMessage,
     updateMessage,
+    removeMessage,
   });
 
   // Refs
@@ -105,10 +107,23 @@ export function ChatInterface({
   }, [sendMessage]);
 
   const handleCitationClick = useCallback((sourceId: string) => {
-    // Open source panel and highlight source
     useTutorStore.getState().setSourcesPanelOpen(true);
-    // TODO: scroll to sourceId in the sources panel
-    console.info('Citation clicked:', sourceId);
+
+    const scrollToSource = (attempt = 0) => {
+      const target = document.getElementById(`source-card-${sourceId}`);
+
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.focus({ preventScroll: true });
+        return;
+      }
+
+      if (attempt < 12) {
+        window.setTimeout(() => scrollToSource(attempt + 1), 120);
+      }
+    };
+
+    scrollToSource();
   }, []);
 
   return (

@@ -147,17 +147,30 @@ const TESTIMONIALS = [
 
 const PRICING_TEASER = [
   { name: 'Free', price: '₦0', period: '', highlight: false },
-  { name: 'Premium', price: '₦2,000', period: '/month', highlight: true },
-  { name: 'Annual', price: '₦20,000', period: '/year', highlight: false, badge: 'Save 17%' },
+  { name: 'Premium', price: '₦2,000', period: '/month', highlight: false },
+  {
+    name: 'Annual',
+    price: '₦20,000',
+    period: '/year',
+    highlight: true,
+    badge: 'Best Value — Save ₦4,000/year',
+  },
 ];
 
 const FREE_HIGHLIGHTS = ['1 workspace', '5 AI queries/day', '10 flashcards'];
-const PRO_HIGHLIGHTS = [
+const MONTHLY_HIGHLIGHTS = [
   'Unlimited workspaces',
-  'Unlimited AI queries',
+  '50 AI queries/day',
+  '2-day free trial',
   'All tutor personalities',
-  'Advanced analytics',
 ];
+const ANNUAL_HIGHLIGHTS = [
+  '100 AI queries/day',
+  '7-day free trial',
+  'Priority support + early access',
+  'Everything in monthly',
+];
+const PRO_BASE_HIGHLIGHTS = ['All tutor personalities', 'Advanced analytics'];
 
 /* ─── Page component ──────────────────────────────────────────────── */
 export default function HomePage() {
@@ -907,7 +920,12 @@ export default function HomePage() {
                       gap: 'var(--space-2)',
                     }}
                   >
-                    {(i === 0 ? FREE_HIGHLIGHTS : PRO_HIGHLIGHTS).map((f) => (
+                    {(i === 0
+                      ? FREE_HIGHLIGHTS
+                      : i === 1
+                        ? [...MONTHLY_HIGHLIGHTS, ...PRO_BASE_HIGHLIGHTS]
+                        : [...ANNUAL_HIGHLIGHTS, ...PRO_BASE_HIGHLIGHTS]
+                    ).map((f) => (
                       <li
                         key={f}
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}

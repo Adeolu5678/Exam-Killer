@@ -97,7 +97,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, PlanDetails> = {
     features: {
       workspaces: 'unlimited',
       fileUploads: 'unlimited',
-      aiQueriesPerDay: 200,
+      aiQueriesPerDay: 100,
       flashcards: 'unlimited',
       tutorPersonalities: ['mentor', 'drill', 'peer', 'professor', 'storyteller', 'coach'],
       spacedRepetition: true,
@@ -185,8 +185,7 @@ export function checkUserLimits(
   upgradeRequired?: boolean;
 } {
   const exceededLimits: string[] = [];
-  const planKey =
-    userSubscription && userSubscription.status === 'active' ? userSubscription.plan : 'free';
+  const planKey = getEffectivePlan(userSubscription);
   const plan = getPlanDetails(planKey);
 
   const workspaceLimit =
@@ -224,6 +223,10 @@ export function checkUserLimits(
 
 export function getPlanDetails(plan: SubscriptionPlan): PlanDetails {
   return SUBSCRIPTION_PLANS[plan];
+}
+
+export function getEffectivePlan(userSubscription: UserSubscription | null): SubscriptionPlan {
+  return userSubscription && userSubscription.status === 'active' ? userSubscription.plan : 'free';
 }
 
 export function calculateSubscriptionExpiry(
@@ -306,7 +309,7 @@ export function getUpgradeMessage(exceededLimits: string[]): string {
     fileUploads:
       'You have reached your monthly file upload limit. Upgrade to Premium for unlimited uploads.',
     aiQueriesPerDay:
-      'You have reached your daily AI query limit. Upgrade to Premium for unlimited queries.',
+      'You have reached your daily AI query limit. Upgrade to Premium for a higher daily quota.',
     flashcards:
       'You have reached the maximum number of flashcards. Upgrade to Premium for unlimited flashcards.',
   };

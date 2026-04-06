@@ -24,7 +24,6 @@ import {
   createWorkspace,
   updateWorkspace,
   deleteWorkspace,
-  createNlmNotebook,
 } from '../api/workspaceApi';
 
 // ---------------------------------------------------------------------------
@@ -68,7 +67,7 @@ export function useWorkspace(
   return useQuery<WorkspaceDetailResponse>({
     queryKey: workspaceKeys.detail(id),
     queryFn: () => fetchWorkspace(id),
-    enabled: !!id,
+    enabled: Boolean(id),
     staleTime: 60_000,
     ...options,
   });
@@ -87,14 +86,6 @@ export function useCreateWorkspace() {
 
     onSuccess: (data: CreateWorkspaceResponse) => {
       toast.success('Workspace created successfully');
-      void qc.invalidateQueries({ queryKey: workspaceKeys.lists() });
-
-      // Secondary action: Create NLM notebook in background
-      if (data.workspace?.id) {
-        createNlmNotebook(data.workspace.id, data.workspace.name).catch((err) => {
-          console.error('Failed to create NLM notebook for workspace:', err);
-        });
-      }
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to create workspace');

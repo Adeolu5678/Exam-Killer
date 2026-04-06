@@ -48,37 +48,76 @@ export const GET = withAuth(async (request, { db, userId }) => {
     const search = searchParams.get('search') || '';
 
     const workspacesRef = db.collection('workspaces');
+    const [ownedSnapshot, memberSnapshot] = await Promise.all([
+      workspacesRef.where('user_id', '==', userId).get(),
+      db.collection('workspace_members').where('user_id', '==', userId).get(),
+    ]);
 
-    let querySnapshot;
+    const workspaceDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    ownedSnapshot.docs.forEach((doc) => workspaceDocs.set(doc.id, doc));
 
-    if (search) {
-      querySnapshot = await workspacesRef
-        .where('user_id', '==', userId)
-        .where('name', '>=', search)
-        .where('name', '<=', search + '\uf8ff')
-        .get();
-    } else {
-      querySnapshot = await workspacesRef.where('user_id', '==', userId).get();
+    if (!memberSnapshot.empty) {
+      const memberWorkspaceDocs = await Promise.all(
+        memberSnapshot.docs.map(async (memberDoc) => {
+          const workspaceId = memberDoc.data().workspace_id as string | undefined;
+          if (!workspaceId || workspaceDocs.has(workspaceId)) {
+            return null;
+          }
+
+          const workspaceDoc = await workspacesRef.doc(workspaceId).get();
+          return workspaceDoc.exists ? workspaceDoc : null;
+        }),
+      );
+
+      memberWorkspaceDocs.forEach((doc) => {
+        if (doc?.exists) {
+          workspaceDocs.set(doc.id, doc as FirebaseFirestore.QueryDocumentSnapshot);
+        }
+      });
     }
 
-    const workspaces = querySnapshot.docs.map((doc) => {
+    const normalizedSearch = search.trim().toLowerCase();
+    const filteredWorkspaceDocs = Array.from(workspaceDocs.values()).filter((doc) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+
       const data = doc.data();
-      return {
-        id: doc.id,
-        name: data.name || '',
-        description: data.description || '',
-        course_code: data.course_code || null,
-        university: data.university || null,
-        tutor_personality: data.tutor_personality || 'mentor',
-        is_public: data.is_public || false,
-        owner_id: data.user_id || '',
-        member_count: 0,
-        source_count: 0,
-        flashcard_count: 0,
-        created_at: data.created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
-        last_accessed: data.last_accessed?.toDate?.()?.toISOString() || new Date().toISOString(),
-      } as WorkspaceListItem;
+      return String(data.name || '')
+        .toLowerCase()
+        .includes(normalizedSearch);
     });
+
+    const workspaces = await Promise.all(
+      filteredWorkspaceDocs.map(async (doc) => {
+        const data = doc.data();
+        const workspaceId = doc.id;
+
+        const [sourcesSnapshot, flashcardsSnapshot, membersSnapshot] = await Promise.all([
+          db.collection('sources').where('workspace_id', '==', workspaceId).count().get(),
+          db.collection('flashcards').where('workspace_id', '==', workspaceId).count().get(),
+          db.collection('workspace_members').where('workspace_id', '==', workspaceId).count().get(),
+        ]);
+
+        return {
+          id: workspaceId,
+          name: data.name || '',
+          description: data.description || '',
+          course_code: data.course_code || null,
+          university: data.university || null,
+          tutor_personality: data.tutor_personality || 'mentor',
+          is_public: data.is_public || false,
+          owner_id: data.user_id || '',
+          member_count: (membersSnapshot.data().count || 0) + 1,
+          source_count: sourcesSnapshot.data().count || 0,
+          flashcard_count: flashcardsSnapshot.data().count || 0,
+          created_at: data.created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
+          last_accessed: data.last_accessed?.toDate?.()?.toISOString() || new Date().toISOString(),
+        } as WorkspaceListItem;
+      }),
+    );
+
+    workspaces.sort((a, b) => b.last_accessed.localeCompare(a.last_accessed));
 
     const total = workspaces.length;
     const startIndex = (page - 1) * limit;
@@ -125,34 +164,52 @@ export const POST = withAuth(async (request, { db, userId }) => {
     } = body;
 
     const personality = tutor_personality as TutorPersonality;
+    const { getUserSubscription } = await import('@/shared/lib/paystack/db');
+    const { getPlanDetails, getEffectivePlan } = await import('@/shared/lib/paystack/subscription');
+    const subscription = await getUserSubscription(userId);
+    const effectivePlan = getEffectivePlan(subscription);
+    const workspaceLimit = getPlanDetails(effectivePlan).features.workspaces;
 
     const workspacesRef = db.collection('workspaces');
     const newWorkspaceRef = workspacesRef.doc();
     const workspaceId = newWorkspaceRef.id;
 
     const now = new Date();
-    await newWorkspaceRef.set({
-      workspace_id: workspaceId,
-      user_id: userId,
-      name,
-      description,
-      course_code,
-      university,
-      tutor_personality: personality,
-      tutor_custom_instructions,
-      is_public,
-      created_at: now,
-      last_accessed: now,
-    });
-
-    // Automatically initialize NotebookLM notebook
-    let nlmNotebook = null;
     try {
-      const { NlmService } = await import('@/shared/lib/notebooklm');
-      nlmNotebook = await NlmService.initializeNotebook(userId, workspaceId, name);
-    } catch (err: any) {
-      console.error('[WorkspacesAPI] Failed to initialize NLM notebook:', err);
-      // We continue since the workspace is created, but the NLM feature will be limited
+      await db.runTransaction(async (transaction) => {
+        if (workspaceLimit !== 'unlimited') {
+          const existingWorkspaces = await transaction.get(
+            db.collection('workspaces').where('user_id', '==', userId).limit(workspaceLimit),
+          );
+
+          if (existingWorkspaces.size >= workspaceLimit) {
+            throw new Error('WORKSPACE_LIMIT_REACHED');
+          }
+        }
+
+        transaction.set(newWorkspaceRef, {
+          workspace_id: workspaceId,
+          user_id: userId,
+          name,
+          description,
+          course_code,
+          university,
+          tutor_personality: personality,
+          tutor_custom_instructions,
+          is_public,
+          created_at: now,
+          last_accessed: now,
+        });
+      });
+    } catch (txError: unknown) {
+      if (txError instanceof Error && txError.message === 'WORKSPACE_LIMIT_REACHED') {
+        return errorResponse(
+          'You have reached your workspace limit. Upgrade your plan for more workspaces.',
+          403,
+          { upgradeRequired: effectivePlan === 'free' },
+        );
+      }
+      throw txError;
     }
 
     return successResponse(
@@ -162,7 +219,6 @@ export const POST = withAuth(async (request, { db, userId }) => {
           name,
           description,
         },
-        nlm: nlmNotebook,
       },
       201,
     );

@@ -746,6 +746,21 @@ export interface VerifyPaymentResponse {
   paid_until: string;
 }
 
+export interface PaymentHistoryItem {
+  reference: string;
+  plan: string;
+  amount: number;
+  status: 'pending' | 'success' | 'failed';
+  payment_method?: string;
+  transaction_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentHistoryResponse {
+  payments: PaymentHistoryItem[];
+}
+
 export interface PaystackWebhookPayload {
   event: string;
   data: {
@@ -767,6 +782,16 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  bio?: string | null;
+  is_admin?: boolean;
+  theme_preference?: 'light' | 'dark' | 'system';
+  content_density?: 'comfortable' | 'compact';
+  notification_preferences?: {
+    due_cards: boolean;
+    streaks: boolean;
+    exam_countdowns: boolean;
+    workspace_invitations: boolean;
+  };
   matric_number: string | null;
   department: string | null;
   level: number | null;
@@ -793,12 +818,22 @@ export interface UpdateProfileRequest {
   matric_number?: string;
   department?: string;
   level?: number;
+  bio?: string | null;
   preferred_tutor_personality?: TutorPersonality;
 }
 
 export interface UpdateProfileResponse {
   success: boolean;
   profile: UserProfile;
+}
+
+export interface DeleteProfileRequest {
+  email: string;
+  confirmation_text: string;
+}
+
+export interface DeleteProfileResponse {
+  success: boolean;
 }
 
 export interface RecentWorkspace {

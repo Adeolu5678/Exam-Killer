@@ -184,7 +184,9 @@ export function CommandPalette() {
       document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = '';
+      if (isCommandPaletteOpen) {
+        document.body.style.overflow = '';
+      }
     };
   }, [isCommandPaletteOpen]);
 

@@ -3,6 +3,7 @@ import { Firestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/shared/lib/firebase/admin';
 
 import type { SubscriptionPlan, UserSubscription, UsageStats } from './subscription';
+import { getPlanDetails, getEffectivePlan } from './subscription';
 
 interface UserDocData {
   subscription_tier?: SubscriptionPlan;
@@ -37,6 +38,17 @@ interface PaymentRecord {
   metadata?: Record<string, unknown>;
 }
 
+export interface UserPaymentHistoryItem {
+  reference: string;
+  plan: SubscriptionPlan;
+  amount: number;
+  status: 'pending' | 'success' | 'failed';
+  payment_method?: string;
+  transaction_id?: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 interface UsageStatsDoc {
   workspaces_count: number;
   file_uploads_this_month: number;
@@ -44,6 +56,12 @@ interface UsageStatsDoc {
   flashcards_count: number;
   last_ai_query_date?: string;
   last_month_reset?: string;
+}
+
+function getDocData<T>(snapshot: FirebaseFirestore.DocumentSnapshot): T | null {
+  if (!snapshot.exists) return null;
+  const data = snapshot.data();
+  return data ? (data as T) : null;
 }
 
 export async function getUserSubscription(uid: string): Promise<UserSubscription | null> {
@@ -60,7 +78,10 @@ export async function getUserSubscription(uid: string): Promise<UserSubscription
       return null;
     }
 
-    const data = userDoc.data() as UserDocData;
+    const data = getDocData<UserDocData>(userDoc);
+    if (!data) {
+      return null;
+    }
 
     if (!data.subscription_tier) {
       return {
@@ -252,10 +273,53 @@ export async function getPaymentRecord(reference: string): Promise<PaymentRecord
       return null;
     }
 
-    return paymentDoc.data() as PaymentRecord;
+    const data = getDocData<PaymentRecord>(paymentDoc);
+    return data;
   } catch (error) {
     console.error('Error fetching payment record:', error);
     return null;
+  }
+}
+
+export async function getUserPaymentHistory(uid: string): Promise<UserPaymentHistoryItem[]> {
+  const db = getAdminDb();
+  if (!db) {
+    console.error('Firestore not initialized');
+    return [];
+  }
+
+  try {
+    const snapshot = await db
+      .collection('payments')
+      .where('user_id', '==', uid)
+      .orderBy('created_at', 'desc')
+      .limit(20)
+      .get();
+
+    const payments: UserPaymentHistoryItem[] = [];
+
+    snapshot.docs.forEach((doc) => {
+      const data = getDocData<PaymentRecord>(doc);
+      if (!data) {
+        return;
+      }
+
+      payments.push({
+        reference: data.reference,
+        plan: data.plan,
+        amount: data.amount,
+        status: data.status,
+        payment_method: data.payment_method,
+        transaction_id: data.transaction_id,
+        created_at: data.created_at.toDate(),
+        updated_at: data.updated_at.toDate(),
+      });
+    });
+
+    return payments;
+  } catch (error) {
+    console.error('Error fetching payment history:', error);
+    return [];
   }
 }
 
@@ -276,9 +340,9 @@ export async function getUserUsageStats(uid: string): Promise<UsageStats> {
     const todayStr = now.toISOString().split('T')[0];
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    const [workspacesSnapshot, filesSnapshot, statsDoc, flashcardsSnapshot] = await Promise.all([
+    const [workspacesSnapshot, sourcesSnapshot, statsDoc, flashcardsSnapshot] = await Promise.all([
       db.collection('workspaces').where('user_id', '==', uid).get(),
-      db.collection('files').where('user_id', '==', uid).get(),
+      db.collection('sources').where('user_id', '==', uid).get(),
       db.collection('usage_stats').doc(uid).get(),
       db.collection('flashcards').where('user_id', '==', uid).get(),
     ]);
@@ -286,7 +350,7 @@ export async function getUserUsageStats(uid: string): Promise<UsageStats> {
     const workspacesCount = workspacesSnapshot.size;
 
     let fileUploadsThisMonth = 0;
-    filesSnapshot.forEach((doc) => {
+    sourcesSnapshot.forEach((doc) => {
       const data = doc.data();
       if (data.created_at) {
         const createdDate = data.created_at.toDate();
@@ -299,8 +363,8 @@ export async function getUserUsageStats(uid: string): Promise<UsageStats> {
 
     let aiQueriesToday = 0;
     if (statsDoc.exists) {
-      const data = statsDoc.data() as UsageStatsDoc;
-      if (data.last_ai_query_date === todayStr) {
+      const data = getDocData<UsageStatsDoc>(statsDoc);
+      if (data && data.last_ai_query_date === todayStr) {
         aiQueriesToday = data.ai_queries_today;
       }
     }
@@ -346,7 +410,14 @@ export async function incrementAiQueryCount(uid: string): Promise<boolean> {
         return;
       }
 
-      const data = statsDoc.data() as UsageStatsDoc;
+      const data = getDocData<UsageStatsDoc>(statsDoc);
+      if (!data) {
+        transaction.set(statsRef, {
+          ai_queries_today: 1,
+          last_ai_query_date: todayStr,
+        });
+        return;
+      }
 
       if (data.last_ai_query_date !== todayStr) {
         // New day, reset count
@@ -366,6 +437,67 @@ export async function incrementAiQueryCount(uid: string): Promise<boolean> {
   } catch (error) {
     console.error('Error incrementing AI query count:', error);
     return false;
+  }
+}
+
+export async function consumeAiQueryQuota(
+  uid: string,
+): Promise<{ allowed: boolean; limit: number }> {
+  const db = getAdminDb();
+  if (!db) {
+    return { allowed: false, limit: 0 };
+  }
+
+  try {
+    const subscription = await getUserSubscription(uid);
+    const effectivePlan = getEffectivePlan(subscription);
+    const plan = getPlanDetails(effectivePlan);
+    const aiLimit =
+      plan.features.aiQueriesPerDay === 'unlimited' ? Infinity : plan.features.aiQueriesPerDay;
+
+    if (!Number.isFinite(aiLimit)) {
+      return { allowed: true, limit: Number.MAX_SAFE_INTEGER };
+    }
+
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const statsRef = db.collection('usage_stats').doc(uid);
+    let allowed = false;
+
+    await db.runTransaction(async (transaction) => {
+      const statsDoc = await transaction.get(statsRef);
+      const data = (statsDoc.exists ? statsDoc.data() : null) as UsageStatsDoc | null;
+      const sameDay = data?.last_ai_query_date === todayStr;
+      const currentCount = sameDay ? (data?.ai_queries_today ?? 0) : 0;
+
+      if (currentCount >= aiLimit) {
+        allowed = false;
+        return;
+      }
+
+      if (!statsDoc.exists) {
+        transaction.set(statsRef, {
+          ai_queries_today: 1,
+          last_ai_query_date: todayStr,
+        });
+      } else if (!sameDay) {
+        transaction.update(statsRef, {
+          ai_queries_today: 1,
+          last_ai_query_date: todayStr,
+        });
+      } else {
+        transaction.update(statsRef, {
+          ai_queries_today: FieldValue.increment(1),
+        });
+      }
+
+      allowed = true;
+    });
+
+    return { allowed, limit: aiLimit };
+  } catch (error) {
+    console.error('Error consuming AI query quota:', error);
+    return { allowed: false, limit: 0 };
   }
 }
 
@@ -445,10 +577,16 @@ export async function getPendingVerifications() {
       .orderBy('verification_submitted_at', 'asc')
       .get();
 
-    return snapshot.docs.map((doc) => ({
-      uid: doc.id,
-      ...(doc.data() as UserDocData),
-    }));
+    return snapshot.docs
+      .map((doc) => {
+        const data = getDocData<UserDocData>(doc);
+        if (!data) return null;
+        return {
+          uid: doc.id,
+          ...data,
+        };
+      })
+      .filter((item): item is UserDocData & { uid: string } => item !== null);
   } catch (error) {
     console.error('Error fetching pending verifications:', error);
     return [];

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { Firestore } from 'firebase-admin/firestore';
+import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import {
@@ -12,6 +12,11 @@ import {
   parseBodyWithZod,
 } from '@/shared/lib/api/auth';
 import { getChatCompletion } from '@/shared/lib/openai/client';
+import {
+  createExamPrompt,
+  EXAM_RESPONSE_SCHEMA,
+  type QuizQuestionType,
+} from '@/shared/lib/openai/prompts';
 
 const GenerateExamSchema = z.object({
   source_ids: z.array(z.string()).optional(),
@@ -27,6 +32,11 @@ interface ExamQuestionFormat {
   options?: string[];
   correct_answer: string;
   explanation: string;
+}
+
+function getWorkspaceIdFromRequest(request: NextRequest): string | null {
+  const pathParts = new URL(request.url).pathname.split('/');
+  return pathParts[3] || null;
 }
 
 function formatQuestions(generatedQuestions: ExamQuestionFormat[]) {
@@ -63,30 +73,13 @@ export const POST = withAuth(async (request, context) => {
       try {
         const workspaceId = workspace.id;
 
-        // Check subscription limits
-        const { getUserSubscription, getUserUsageStats } = await import('@/shared/lib/paystack/db');
-        const subscription = await getUserSubscription(userId);
-
-        if (subscription) {
-          const { checkUserLimits } = await import('@/shared/lib/paystack/subscription');
-          const usage = await getUserUsageStats(userId);
-          const limits = checkUserLimits(subscription, usage);
-
-          if (!limits.canProceed) {
-            return errorResponse(
-              'Exam limit exceeded. Upgrade to Premium for unlimited exams!',
-              StatusCodes.FORBIDDEN,
-              { upgradeRequired: true },
-            );
-          }
-        }
-
         const { data: body, error } = await parseBodyWithZod(req, GenerateExamSchema);
 
         if (error) return error;
         if (!body) return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
 
-        const { source_ids, question_count, time_limit_minutes } = body;
+        const { source_ids, question_count, time_limit_minutes, question_types, focus_topics } =
+          body;
 
         // Gather content using shared utility
         const { fetchRAGContent, truncateContent } = await import('@/shared/lib/rag/content');
@@ -101,50 +94,36 @@ export const POST = withAuth(async (request, context) => {
 
         const truncatedContent = truncateContent(content);
 
-        const prompt = `You are an expert test creator specializing in comprehensive exam assessments. Generate high-quality exam questions from the provided content.
+        const prompt = createExamPrompt(
+          truncatedContent,
+          question_count,
+          question_types as QuizQuestionType[] | undefined,
+          focus_topics,
+        );
 
-Requirements:
-- Create questions that test deep understanding, not just memorization
-- Include a mix of difficulty levels (easy, medium, hard)
-- Ensure all questions have clear, unambiguous wording
-- Provide correct answers with detailed explanations
-- For multiple choice, include 4 options with one clearly correct answer
-- Cover the breadth of the material provided
-- These are exam-style questions - make them comprehensive and challenging
-
-Question types to include:
-- Multiple choice: 4 options, single correct answer
-- True/False: Clear statements that are definitively true or false
-- Short answer: Questions requiring brief written responses
-
-Output format (JSON array):
-[
-  {
-    "type": "multiple_choice" | "true_false" | "short_answer",
-    "question": "Question text",
-    "options": ["Option A", "Option B", "Option C", "Option D"], // for multiple choice only
-    "correct_answer": "The correct answer",
-    "explanation": "Detailed explanation of why this is correct"
-  }
-]
-
-Generate ${question_count} exam questions from the following content:
-${truncatedContent}`;
+        const { consumeAiQueryQuota } = await import('@/shared/lib/paystack/db');
+        const aiQuota = await consumeAiQueryQuota(userId);
+        if (!aiQuota.allowed) {
+          return errorResponse(
+            'You have reached your daily AI query limit. Upgrade your plan for a higher limit.',
+            StatusCodes.FORBIDDEN,
+            { upgradeRequired: aiQuota.limit <= 5 },
+          );
+        }
 
         const { RAG_CONFIG } = await import('@/shared/lib/rag/config');
         const response = await getChatCompletion([{ role: 'user', content: prompt }], {
           temperature: RAG_CONFIG.AI.DEFAULT_TEMPERATURE,
           maxTokens: RAG_CONFIG.AI.MAX_TOKENS,
           mockType: 'quiz',
+          responseMimeType: 'application/json',
+          responseSchema: EXAM_RESPONSE_SCHEMA,
         });
 
         let generatedQuestions: ExamQuestionFormat[] = [];
 
         try {
-          const jsonMatch = response.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            generatedQuestions = JSON.parse(jsonMatch[0]);
-          }
+          generatedQuestions = JSON.parse(response) as ExamQuestionFormat[];
         } catch (parseError) {
           console.error('Failed to parse exam response:', parseError);
           return errorResponse(
@@ -173,7 +152,7 @@ ${truncatedContent}`;
           time_limit_minutes,
           status: 'in_progress',
           completed: false,
-          created_at: require('firebase-admin/firestore').Timestamp.now(),
+          created_at: Timestamp.now(),
         };
 
         const examRef = await db.collection('exams').add(examData);
@@ -185,10 +164,6 @@ ${truncatedContent}`;
           options: q.options,
           difficulty: q.difficulty,
         }));
-
-        // Increment AI query count
-        const { incrementAiQueryCount } = await import('@/shared/lib/paystack/db');
-        await incrementAiQueryCount(userId);
 
         return successResponse(
           {
@@ -206,12 +181,12 @@ ${truncatedContent}`;
       }
     },
     async (req, ctx) => {
-      const workspaceId = req.url.split('/workspaces/')[1]?.split('/')[0];
+      const workspaceId = getWorkspaceIdFromRequest(req);
       if (!workspaceId) return null;
       const doc = await ctx.db.collection('workspaces').doc(workspaceId).get();
       if (!doc.exists) return null;
       return { id: doc.id, ...doc.data() };
     },
-    (workspace: any) => workspace.user_id,
+    (workspace: Record<string, any>) => workspace.user_id as string,
   )(request, context);
 });

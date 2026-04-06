@@ -43,25 +43,23 @@ function createQueryClient() {
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const context = useContext(AuthContext);
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
 
   const user = context?.user ?? null;
   const loading = context?.loading ?? true;
   const subscription = context?.subscription ?? null;
+  const isLoadingSubscription = context?.isLoadingSubscription ?? false;
 
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (mounted && !loading && (!isFirebaseConfigured || !user)) {
+    if (!loading && (!isFirebaseConfigured || !user)) {
       router.replace('/auth/login');
     }
-  }, [mounted, loading, user, router]);
+  }, [loading, user, router]);
 
-  // Show nothing while auth resolves or component mounts (avoids flash & hydration errors)
-  if (loading || !mounted) {
+  // Show nothing while auth resolves or subscription is fetching for a new user
+  const isInitialLoading = loading;
+  const isSubscriptionLoading = user && isLoadingSubscription && !subscription;
+
+  if (isInitialLoading || isSubscriptionLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg-base)]">
         <span className="sr-only">Loading…</span>
@@ -77,7 +75,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <AppShell user={user} subscription={subscription}>
+    <AppShell
+      user={user}
+      subscription={
+        subscription
+          ? { plan: subscription.plan, status: subscription.status }
+          : { plan: 'free', status: 'inactive' }
+      }
+    >
       {children}
     </AppShell>
   );

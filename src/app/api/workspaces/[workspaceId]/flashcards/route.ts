@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 import {
   withAuth,
@@ -33,7 +33,19 @@ async function verifyWorkspaceAccess(
   }
 
   const workspaceData = workspaceDoc.data();
-  return { exists: true, hasAccess: workspaceData?.user_id === userId };
+
+  const isOwner = workspaceData?.user_id === userId;
+
+  const memberSnapshot = await db
+    .collection('workspace_members')
+    .where('workspace_id', '==', workspaceId)
+    .where('user_id', '==', userId)
+    .limit(1)
+    .get();
+
+  const isMember = !memberSnapshot.empty;
+
+  return { exists: true, hasAccess: isOwner || isMember };
 }
 
 export const GET = withAuth(async (request, { db, userId }) => {
@@ -45,9 +57,7 @@ export const GET = withAuth(async (request, { db, userId }) => {
   }
 
   if (!hasAccess) {
-    return NextResponse.json(AuthErrors.FORBIDDEN, {
-      status: StatusCodes.FORBIDDEN,
-    });
+    return errorResponse('Forbidden', StatusCodes.FORBIDDEN);
   }
 
   const { searchParams } = new URL(request.url);
@@ -91,9 +101,7 @@ export const POST = withAuth(async (request, { db, userId }) => {
   }
 
   if (!hasAccess) {
-    return NextResponse.json(AuthErrors.FORBIDDEN, {
-      status: StatusCodes.FORBIDDEN,
-    });
+    return errorResponse('Forbidden', StatusCodes.FORBIDDEN);
   }
 
   const body = await request.json().catch(() => null);
@@ -139,5 +147,5 @@ export const POST = withAuth(async (request, { db, userId }) => {
     next_review: initialData.next_review.toISOString(),
   };
 
-  return NextResponse.json({ flashcard }, { status: StatusCodes.CREATED });
+  return successResponse({ flashcard }, StatusCodes.CREATED);
 });

@@ -1,11 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+import { withAuth, errorResponse, successResponse, StatusCodes } from '@/shared/lib/api/auth';
+
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const { content, type } = await request.json();
 
     if (!content) {
-      return NextResponse.json({ error: 'Content is required' }, { status: 400 });
+      return errorResponse('Content is required', StatusCodes.BAD_REQUEST);
     }
 
     // Format message for WhatsApp
@@ -22,12 +24,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Create WhatsApp share URL
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
 
-    return NextResponse.json({
+    return successResponse({
       share_url: whatsappUrl,
       message: message,
     });
   } catch (error: unknown) {
     console.error('WhatsApp share error:', error);
-    return NextResponse.json({ error: 'Failed to create share link' }, { status: 500 });
+    return errorResponse('Failed to create share link', StatusCodes.INTERNAL_ERROR);
   }
-}
+});

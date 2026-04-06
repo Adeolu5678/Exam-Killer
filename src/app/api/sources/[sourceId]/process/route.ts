@@ -101,33 +101,72 @@ export const POST = withAuth(async (request: NextRequest, { db, userId }) => {
     return errorResponse('Storage not configured', StatusCodes.INTERNAL_ERROR);
   }
 
-  const sourceDoc = await db.collection('sources').doc(sourceId).get();
+  const sourceRef = db.collection('sources').doc(sourceId);
+  const lockResult = await db.runTransaction(async (transaction) => {
+    const sourceDoc = await transaction.get(sourceRef);
+    if (!sourceDoc.exists) {
+      return { status: 'not_found' as const };
+    }
 
-  if (!sourceDoc.exists) {
+    const sourceData = sourceDoc.data();
+    if (!sourceData) {
+      return { status: 'not_found' as const };
+    }
+
+    if (sourceData.user_id !== userId) {
+      return { status: 'forbidden' as const };
+    }
+
+    if (sourceData.processed) {
+      return {
+        status: 'already_processed' as const,
+        chunkCount: sourceData.chunk_count || 0,
+      };
+    }
+
+    if (sourceData.embedding_status === 'processing') {
+      return { status: 'already_processing' as const };
+    }
+
+    if (sourceData.embedding_status === 'failed') {
+      return { status: 'failed' as const };
+    }
+
+    transaction.update(sourceRef, {
+      embedding_status: 'processing',
+    });
+
+    return { status: 'locked' as const, sourceData };
+  });
+
+  if (lockResult.status === 'not_found') {
     return errorResponse('Source not found', StatusCodes.NOT_FOUND);
   }
 
-  const sourceData = sourceDoc.data();
-
-  if (!sourceData) {
-    return errorResponse('Source not found', StatusCodes.NOT_FOUND);
-  }
-
-  if (sourceData.user_id !== userId) {
+  if (lockResult.status === 'forbidden') {
     return errorResponse('Access denied', StatusCodes.FORBIDDEN);
   }
 
-  if (sourceData.processed) {
+  if (lockResult.status === 'already_processed') {
     return successResponse({
       success: true,
       sourceId,
-      chunkCount: sourceData.chunk_count || 0,
+      chunkCount: lockResult.chunkCount || 0,
     });
   }
 
-  await db.collection('sources').doc(sourceId).update({
-    embedding_status: 'processing',
-  });
+  if (lockResult.status === 'already_processing') {
+    return errorResponse('Source is already being processed', StatusCodes.BAD_REQUEST);
+  }
+
+  if (lockResult.status === 'failed') {
+    return errorResponse(
+      'This source failed processing previously. Re-upload the file to retry.',
+      StatusCodes.BAD_REQUEST,
+    );
+  }
+
+  const sourceData = lockResult.sourceData;
 
   let chunks: TextChunk[];
 

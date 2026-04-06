@@ -29,7 +29,7 @@ export interface SourceItem {
    * Backend embedding pipeline stage. Used to derive ProcessingStage below.
    * Known values: "pending" | "processing" | "completed" | "failed"
    */
-  embedding_status: string;
+  embedding_status: 'pending' | 'processing' | 'completed' | 'failed';
   created_at: string;
 }
 

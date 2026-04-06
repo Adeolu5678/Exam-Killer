@@ -20,11 +20,7 @@ import type {
 } from '@/shared/lib/paystack/subscription';
 import { SUBSCRIPTION_PLANS } from '@/shared/lib/paystack/subscription';
 
-interface SubscriptionInfo {
-  plan: SubscriptionPlan;
-  status: 'active' | 'inactive' | 'past_due';
-  currentPeriodEnd?: Date;
-}
+type SubscriptionInfo = UserSubscription;
 
 interface UsageInfo {
   workspacesCount: number;

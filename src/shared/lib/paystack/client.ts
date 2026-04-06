@@ -264,13 +264,14 @@ export async function listTransactions(
 }
 
 export function verifyWebhookSignature(payload: string, signature: string): boolean {
-  if (!PAYSTACK_WEBHOOK_SECRET) {
+  const signingSecret = PAYSTACK_WEBHOOK_SECRET || PAYSTACK_SECRET_KEY;
+  if (!signingSecret) {
     return false;
   }
 
   try {
     const crypto = require('crypto');
-    const hash = crypto.createHmac('sha512', PAYSTACK_WEBHOOK_SECRET).update(payload).digest('hex');
+    const hash = crypto.createHmac('sha512', signingSecret).update(payload).digest('hex');
 
     return hash === signature;
   } catch (error) {
@@ -382,25 +383,27 @@ export async function updateCustomer(
   }
 
   try {
-    const customerResponse = await fetch(
-      `${PAYSTACK_BASE_URL}/customer/${encodeURIComponent(params.email)}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        },
+    const createOrUpdate = await fetch(`${PAYSTACK_BASE_URL}/customer`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        'Content-Type': 'application/json',
       },
-    );
-
-    const customerData = await customerResponse.json();
-
-    if (!customerResponse.ok || !customerData.data) {
-      return createCustomer({
+      body: JSON.stringify({
         email: params.email,
         first_name: params.first_name,
         last_name: params.last_name,
         phone: params.phone,
-      });
+      }),
+    });
+
+    const customerData = await createOrUpdate.json();
+
+    if (!createOrUpdate.ok || !customerData.data) {
+      return {
+        success: false,
+        message: customerData.message || 'Failed to upsert customer',
+      };
     }
 
     const updateResponse = await fetch(`${PAYSTACK_BASE_URL}/customer/${customerData.data.id}`, {

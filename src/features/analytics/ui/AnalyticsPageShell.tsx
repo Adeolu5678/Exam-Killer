@@ -62,6 +62,7 @@ export function AnalyticsPageShell({ workspaceId }: AnalyticsPageShellProps) {
 
   if (!stats) return <AnalyticsPageSkeleton />;
 
+  const isEmpty = stats.totalSessions === 0;
   const statCards = buildStatCards(stats);
 
   return (
@@ -76,6 +77,18 @@ export function AnalyticsPageShell({ workspaceId }: AnalyticsPageShellProps) {
           <p className={styles.subtitle}>Track your study performance and consistency</p>
         </div>
       </div>
+
+      {isEmpty && (
+        <div className={styles.emptyBanner}>
+          <div className={styles.emptyIcon}>
+            <BarChart2 size={32} />
+          </div>
+          <h2 className={styles.emptyTitle}>No activity yet</h2>
+          <p className={styles.emptyText}>
+            Start studying or take a quiz to see your progress reflected here.
+          </p>
+        </div>
+      )}
 
       {/* Top stats row */}
       <section className={styles.statsSection} aria-label="Performance statistics">

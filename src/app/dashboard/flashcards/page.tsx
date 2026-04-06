@@ -21,6 +21,7 @@ import {
   CardTitle,
   CardDescription,
   CardSkeleton,
+  Button,
 } from '@/shared/ui';
 
 import { FlashCardDeck, useFlashcards } from '@/features/flashcards';
@@ -50,6 +51,9 @@ function WorkspaceDeckSection({
         cards={cards ?? []}
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
+        reviewHref={`/dashboard/workspace/${workspace.id}/flashcards`}
+        reviewLabel="Open workspace deck"
+        hideCreationActions
       />
     </section>
   );
@@ -107,6 +111,11 @@ export default function GlobalFlashcardsPage() {
             <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)' }}>
               Create a workspace to start building flashcard decks.
             </p>
+            <div className="mt-4">
+              <Button as="a" href="/dashboard/workspaces">
+                Go to Workspaces
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

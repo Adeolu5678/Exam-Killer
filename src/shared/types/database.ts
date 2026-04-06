@@ -1,6 +1,6 @@
 export type TutorPersonality = 'mentor' | 'drill' | 'peer' | 'professor' | 'storyteller' | 'coach';
 
-export type SubscriptionStatus = 'free' | 'premium' | 'active';
+export type SubscriptionStatus = 'active' | 'inactive' | 'past_due';
 
 export type SourceType = 'pdf' | 'image' | 'text' | 'link' | 'note';
 
@@ -18,6 +18,7 @@ export interface User {
   uid: string;
   email: string;
   full_name: string;
+  bio?: string;
   subscription_status: SubscriptionStatus;
   subscription_tier?: string;
   paid_until?: Date;

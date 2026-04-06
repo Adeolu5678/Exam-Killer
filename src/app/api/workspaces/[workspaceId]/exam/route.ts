@@ -20,7 +20,17 @@ async function verifyWorkspaceAccess(
   }
 
   const workspaceData = workspaceDoc.data();
-  return workspaceData?.user_id === userId;
+  const isOwner = workspaceData?.user_id === userId;
+
+  const memberSnapshot = await db
+    .collection('workspace_members')
+    .where('workspace_id', '==', workspaceId)
+    .where('user_id', '==', userId)
+    .limit(1)
+    .get();
+
+  const isMember = !memberSnapshot.empty;
+  return isOwner || isMember;
 }
 
 export const GET = withAuth(async (request, { db, userId }) => {

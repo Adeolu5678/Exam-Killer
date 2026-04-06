@@ -31,6 +31,9 @@ export default function AdminVerificationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [accessState, setAccessState] = useState<'allowed' | 'unauthorized' | 'forbidden'>(
+    'allowed',
+  );
 
   useEffect(() => {
     fetchVerifications();
@@ -38,9 +41,19 @@ export default function AdminVerificationsPage() {
 
   const fetchVerifications = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/admin/verifications');
       const data = await res.json();
+      if (res.status === 401) {
+        setAccessState('unauthorized');
+        throw new Error('Sign in to review verification requests.');
+      }
+      if (res.status === 403) {
+        setAccessState('forbidden');
+        throw new Error('Your account does not have admin access to this page.');
+      }
+      setAccessState('allowed');
       if (!res.ok) throw new Error(data.error || 'Failed to fetch verifications');
       setVerifications(data.verifications);
     } catch (err: any) {
@@ -52,6 +65,7 @@ export default function AdminVerificationsPage() {
 
   const handleReview = async (targetUserId: string, status: 'verified' | 'rejected') => {
     setActioningId(targetUserId);
+    setError(null);
     try {
       const res = await fetch('/api/admin/verifications', {
         method: 'POST',
@@ -59,12 +73,20 @@ export default function AdminVerificationsPage() {
         body: JSON.stringify({ targetUserId, status }),
       });
       const data = await res.json();
+      if (res.status === 401) {
+        setAccessState('unauthorized');
+        throw new Error('Your session expired. Sign in again to continue.');
+      }
+      if (res.status === 403) {
+        setAccessState('forbidden');
+        throw new Error('Only admin accounts can review verification requests.');
+      }
       if (!res.ok) throw new Error(data.error || 'Action failed');
 
       // Remove from list
       setVerifications((prev) => prev.filter((v) => v.uid !== targetUserId));
     } catch (err: any) {
-      alert(err.message);
+      setError(err.message);
     } finally {
       setActioningId(null);
     }
@@ -83,7 +105,9 @@ export default function AdminVerificationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Identity Verifications</h1>
-          <p className="text-gray-500">Review student ID cards and portal screenshots</p>
+          <p className="text-gray-500">
+            Review student ID cards and portal screenshots before granting verification.
+          </p>
         </div>
         <Button onClick={fetchVerifications} variant="ghost">
           Refresh
@@ -91,7 +115,16 @@ export default function AdminVerificationsPage() {
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-600">{error}</div>
+        <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-600">
+          <p className="font-medium">
+            {accessState === 'forbidden'
+              ? 'Admin access required'
+              : accessState === 'unauthorized'
+                ? 'Authentication required'
+                : 'Unable to load verification queue'}
+          </p>
+          <p className="mt-1 text-sm">{error}</p>
+        </div>
       ) : verifications.length === 0 ? (
         <Card className="p-12 text-center text-gray-500">No pending verifications found.</Card>
       ) : (

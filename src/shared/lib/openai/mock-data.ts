@@ -1,4 +1,4 @@
-const MOCK_MODE_ENABLED = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'mock';
+const MOCK_MODE_ENABLED = process.env.GEMINI_API_KEY === 'mock' || !process.env.GEMINI_API_KEY;
 
 const MOCK_FLASHCARDS = `[
   {"front": "What is the capital of France?", "back": "Paris", "tags": ["geography", "europe"]},
@@ -31,9 +31,33 @@ const MOCK_SUMMARY = `{
   ]
 }`;
 
-const MOCK_TUTOR_RESPONSE = `Hello! I'm currently running in demo mode since OpenAI is not configured. This means you're seeing sample responses to help you understand how the AI tutoring feature works. 
+const MOCK_STUDY_PLAN = `[
+  {
+    "date": "2026-03-20",
+    "topic": "Core concepts review",
+    "duration_minutes": 90,
+    "activity_type": "review",
+    "completed": false
+  },
+  {
+    "date": "2026-03-21",
+    "topic": "Practice questions",
+    "duration_minutes": 90,
+    "activity_type": "practice",
+    "completed": false
+  },
+  {
+    "date": "2026-03-22",
+    "topic": "Flashcard reinforcement",
+    "duration_minutes": 90,
+    "activity_type": "flashcard",
+    "completed": false
+  }
+]`;
 
-To enable full AI capabilities, please configure your OpenAI API key in the environment variables. Once configured, I'll be able to provide personalized tutoring, answer questions about your study materials, and offer tailored learning assistance based on your specific needs.
+const MOCK_TUTOR_RESPONSE = `Hello! I'm currently running in demo mode since Gemini is not configured. This means you're seeing sample responses to help you understand how the AI tutoring feature works. 
+
+To enable full AI capabilities, please configure your Gemini API key in the environment variables. Once configured, I'll be able to provide personalized tutoring, answer questions about your study materials, and offer tailored learning assistance based on your specific needs.
 
 Feel free to explore the demo features in the meantime!`;
 
@@ -49,12 +73,16 @@ export function getMockSummary(): string {
   return MOCK_SUMMARY;
 }
 
+export function getMockStudyPlan(): string {
+  return MOCK_STUDY_PLAN;
+}
+
 export function getMockTutorResponse(): string {
   return MOCK_TUTOR_RESPONSE;
 }
 
 export function getMockEmbedding(): number[] {
-  return Array(1536)
+  return Array(768)
     .fill(0)
     .map(() => Math.random() * 2 - 1);
 }

@@ -9,7 +9,7 @@
 // and shows a summary of upcoming exams and sessions for each.
 // =============================================================================
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { CalendarCheck2, ArrowRight, Clock, AlertCircle } from 'lucide-react';
 
+import { useAuth } from '@/shared/hooks/useAuth';
 import {
   Card,
   CardContent,
@@ -124,23 +125,8 @@ function WorkspaceStudySummary({ workspace }: WorkspaceSummaryProps) {
 export default function GlobalStudyPlanPage() {
   const { data: wsResponse, isLoading, isError } = useWorkspaces();
   const workspaces = wsResponse?.workspaces ?? [];
-
-  const [subscription, setSubscription] = useState<any>(null);
-
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch('/api/payments/status');
-        if (res.ok) {
-          const data = await res.json();
-          setSubscription(data.subscription);
-        }
-      } catch (err) {
-        console.error('Failed to fetch subscription status');
-      }
-    };
-    fetchStatus();
-  }, []);
+  const { subscription } = useAuth();
+  const router = useRouter();
 
   const vStatus = subscription?.verificationStatus || 'none';
 
@@ -149,7 +135,10 @@ export default function GlobalStudyPlanPage() {
       <div className="mx-auto max-w-5xl p-6 lg:p-10">
         {/* Verification Banner */}
         <div className="mb-6">
-          <VerificationBanner status={vStatus} onVerifyClick={() => {}} />
+          <VerificationBanner
+            status={vStatus}
+            onVerifyClick={() => router.push('/dashboard/settings')}
+          />
         </div>
 
         {/* Header */}

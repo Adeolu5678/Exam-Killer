@@ -5,8 +5,10 @@ import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { sendPasswordResetEmail } from 'firebase/auth';
+
 import { useAuth } from '@/shared/hooks/useAuth';
-import { isFirebaseConfigured } from '@/shared/lib/firebase/client';
+import { auth, isFirebaseConfigured } from '@/shared/lib/firebase/client';
 
 interface FormErrors {
   email?: string;
@@ -48,6 +50,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [passwordResetMessage, setPasswordResetMessage] = useState<string | null>(null);
   const { login, loginWithGoogle } = useAuth();
 
   if (!isFirebaseConfigured) {
@@ -80,6 +84,7 @@ export default function LoginPage() {
 
     setIsLoading(true);
     setErrors({});
+    setPasswordResetMessage(null);
 
     try {
       await login(email, password);
@@ -103,6 +108,7 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setErrors({});
+    setPasswordResetMessage(null);
 
     try {
       await loginWithGoogle();
@@ -112,6 +118,42 @@ export default function LoginPage() {
       setErrors({ general: `Failed to sign in with Google: ${errorMessage}` });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setErrors({});
+    setPasswordResetMessage(null);
+
+    if (!email.trim()) {
+      setErrors({ email: 'Enter your email address first' });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErrors({ email: 'Please enter a valid email address' });
+      return;
+    }
+
+    if (!auth) {
+      setErrors({ general: 'Firebase is not configured correctly.' });
+      return;
+    }
+
+    setIsResettingPassword(true);
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setPasswordResetMessage('Password reset email sent. Check your inbox and spam folder.');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send reset email';
+      if (errorMessage.includes('user-not-found')) {
+        setErrors({ general: 'No account found with this email' });
+      } else {
+        setErrors({ general: 'Failed to send reset email. Please try again.' });
+      }
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -125,6 +167,11 @@ export default function LoginPage() {
       {errors.general && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/20 px-4 py-3 text-sm text-red-200">
           {errors.general}
+        </div>
+      )}
+      {passwordResetMessage && (
+        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100">
+          {passwordResetMessage}
         </div>
       )}
 
@@ -146,9 +193,19 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium text-indigo-200">
-            Password
-          </label>
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <label htmlFor="password" className="block text-sm font-medium text-indigo-200">
+              Password
+            </label>
+            <button
+              type="button"
+              onClick={handlePasswordReset}
+              disabled={isLoading || isResettingPassword}
+              className="text-xs font-medium text-indigo-300 transition hover:text-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isResettingPassword ? 'Sending reset…' : 'Forgot password?'}
+            </button>
+          </div>
           <input
             id="password"
             type="password"

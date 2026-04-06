@@ -6,7 +6,7 @@
 // FSD: imports only from @/shared/ui and local model
 // =============================================================================
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarClock, AlertTriangle, CheckCircle2, Trophy } from 'lucide-react';
@@ -203,6 +203,26 @@ interface ExamCountdownProps {
 }
 
 export function ExamCountdown({ exams, isLoading = false, onAddExam }: ExamCountdownProps) {
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTick((v) => v + 1);
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // Sort: upcoming first, then by proximity.
+  const sortedExams = [...exams]
+    .map((e) => ({ exam: e, countdown: computeCountdown(e) }))
+    .sort((a, b) => {
+      if (a.countdown.isPast && !b.countdown.isPast) return 1;
+      if (!a.countdown.isPast && b.countdown.isPast) return -1;
+      if (a.exam.isPrimary && !b.exam.isPrimary) return -1;
+      if (!a.exam.isPrimary && b.exam.isPrimary) return 1;
+      return a.countdown.daysRemaining - b.countdown.daysRemaining;
+    });
+
   if (isLoading) {
     return (
       <div className={styles.root}>
@@ -240,17 +260,6 @@ export function ExamCountdown({ exams, isLoading = false, onAddExam }: ExamCount
       </div>
     );
   }
-
-  // Sort: upcoming first, then by proximity
-  const sortedExams = [...exams]
-    .map((e) => ({ exam: e, countdown: computeCountdown(e) }))
-    .sort((a, b) => {
-      if (a.countdown.isPast && !b.countdown.isPast) return 1;
-      if (!a.countdown.isPast && b.countdown.isPast) return -1;
-      if (a.exam.isPrimary && !b.exam.isPrimary) return -1;
-      if (!a.exam.isPrimary && b.exam.isPrimary) return 1;
-      return a.countdown.daysRemaining - b.countdown.daysRemaining;
-    });
 
   return (
     <section className={styles.root} aria-label="Exam Countdown">

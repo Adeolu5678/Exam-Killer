@@ -52,10 +52,26 @@ const FREE_FEATURES = [
   { name: 'Offline Mode', value: false },
 ];
 
-const PREMIUM_FEATURES = [
+const PREMIUM_MONTHLY_FEATURES = [
   { name: 'Workspaces', value: 'Unlimited' },
   { name: 'File Uploads', value: 'Unlimited' },
-  { name: 'AI Queries', value: 'Unlimited' },
+  { name: 'AI Queries', value: '50 per day' },
+  { name: 'Billing', value: 'Flexible monthly' },
+  { name: 'Flashcards', value: 'Unlimited' },
+  { name: 'Tutor Personalities', value: 'All' },
+  { name: 'Spaced Repetition', value: true },
+  { name: 'Analytics', value: 'Advanced' },
+  { name: 'Collaboration', value: true },
+  { name: 'Export PDF', value: true },
+  { name: 'Export Anki', value: true },
+  { name: 'Offline Mode', value: true },
+];
+
+const PREMIUM_ANNUAL_FEATURES = [
+  { name: 'Workspaces', value: 'Unlimited' },
+  { name: 'File Uploads', value: 'Unlimited' },
+  { name: 'AI Queries', value: '100 per day' },
+  { name: 'Billing', value: 'Best yearly value' },
   { name: 'Flashcards', value: 'Unlimited' },
   { name: 'Tutor Personalities', value: 'All' },
   { name: 'Spaced Repetition', value: true },
@@ -69,6 +85,7 @@ const PREMIUM_FEATURES = [
 const ANNUAL_ADDITIONAL = [
   { name: 'Priority Support', value: true },
   { name: 'Early Access', value: true },
+  { name: 'Free Trial', value: '7 days (vs 2 days monthly)' },
 ];
 
 /* ─── Sub-components ────────────────────────────────────────────────── */
@@ -314,7 +331,7 @@ export default function PricingPage() {
     if (plan === currentPlan && currentStatus === 'active') return 'Current Plan';
     if (plan === 'free') return 'Current Plan';
     if (currentPlan === 'free') {
-      return plan === 'premium_monthly' ? 'Start 2-Day Free Trial' : 'Start 1-Week Free Trial';
+      return plan === 'premium_monthly' ? 'Start 2-Day Free Trial' : 'Start 7-Day Free Trial';
     }
     return 'Upgrade now';
   };
@@ -531,24 +548,24 @@ export default function PricingPage() {
             name="Premium"
             price="₦2,000"
             billingPeriod="month"
-            features={PREMIUM_FEATURES}
+            features={PREMIUM_MONTHLY_FEATURES}
             buttonText={getButtonText('premium_monthly')}
             isCurrentPlan={isCurrentPlan('premium_monthly')}
             onSubscribe={() => handleSubscribe('premium_monthly', currentPlan === 'free')}
             isLoading={paymentLoading}
-            popular
           />
           <PricingCard
             name="Annual"
             price="₦20,000"
             billingPeriod="year"
-            features={PREMIUM_FEATURES}
+            features={PREMIUM_ANNUAL_FEATURES}
             additionalFeatures={ANNUAL_ADDITIONAL}
             buttonText={getButtonText('premium_annual')}
             isCurrentPlan={isCurrentPlan('premium_annual')}
             onSubscribe={() => handleSubscribe('premium_annual', currentPlan === 'free')}
             isLoading={paymentLoading}
-            badge="Best Value — Save 17%"
+            popular
+            badge="Best Value — Save ₦4,000/year"
           />
         </motion.div>
 

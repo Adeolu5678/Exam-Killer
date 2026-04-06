@@ -21,7 +21,22 @@ async function verifyWorkspaceAccess(
 
   const workspaceData = workspaceDoc.data();
 
-  if (!workspaceData || workspaceData.user_id !== userId) {
+  if (!workspaceData) {
+    return null;
+  }
+
+  const isOwner = workspaceData.user_id === userId;
+
+  const memberSnapshot = await db
+    .collection('workspace_members')
+    .where('workspace_id', '==', workspaceId)
+    .where('user_id', '==', userId)
+    .limit(1)
+    .get();
+
+  const isMember = !memberSnapshot.empty;
+
+  if (!isOwner && !isMember) {
     return null;
   }
 

@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import {
   withAuth,
-  withOwnership,
   parseBodyWithZod,
   errorResponse,
   successResponse,
   StatusCodes,
-  AuthContext,
 } from '@/shared/lib/api/auth';
 import { getChatCompletion } from '@/shared/lib/openai/client';
-import { createFlashcardPrompt } from '@/shared/lib/openai/prompts';
+import { createFlashcardPrompt, FLASHCARD_RESPONSE_SCHEMA } from '@/shared/lib/openai/prompts';
 import { getInitialFlashcardData } from '@/shared/lib/spaced-repetition';
 
 const GenerateFlashcardsSchema = z.object({
@@ -38,135 +37,149 @@ interface GeneratedFlashcard {
 
 // Segment parsing redundant here
 
+function getWorkspaceIdFromRequest(request: NextRequest): string | null {
+  const pathParts = new URL(request.url).pathname.split('/');
+  return pathParts[3] || null;
+}
+
 export const POST = withAuth(async (request, context) => {
   const { db, userId } = context;
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(request);
+    if (!workspaceId) {
+      return errorResponse('Workspace not found', StatusCodes.NOT_FOUND);
+    }
 
-  return withOwnership(
-    async (req, ctx, workspace) => {
-      try {
-        const workspaceId = workspace.id;
-        const { data: body, error } = await parseBodyWithZod(req, GenerateFlashcardsSchema);
+    const workspaceDoc = await db.collection('workspaces').doc(workspaceId).get();
+    if (!workspaceDoc.exists) {
+      return errorResponse('Workspace not found', StatusCodes.NOT_FOUND);
+    }
 
-        if (error) return error;
-        if (!body) return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
+    const workspaceData = workspaceDoc.data();
+    const memberSnapshot = await db
+      .collection('workspace_members')
+      .where('workspace_id', '==', workspaceId)
+      .where('user_id', '==', userId)
+      .limit(1)
+      .get();
 
-        const { source_ids, count, topics } = body;
+    if (!workspaceData || (workspaceData.user_id !== userId && memberSnapshot.empty)) {
+      return errorResponse('Workspace not found or access denied', StatusCodes.NOT_FOUND);
+    }
 
-        // Check subscription limits
-        const { getUserSubscription, getUserUsageStats } = await import('@/shared/lib/paystack/db');
-        const subscription = await getUserSubscription(userId);
+    const { data: body, error } = await parseBodyWithZod(request, GenerateFlashcardsSchema);
 
-        if (subscription) {
-          const { checkUserLimits } = await import('@/shared/lib/paystack/subscription');
-          const usage = await getUserUsageStats(userId);
-          const limits = checkUserLimits(subscription, usage);
+    if (error) return error;
+    if (!body) return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
 
-          if (!limits.canProceed) {
-            return errorResponse(
-              'Flashcard limit exceeded. Upgrade to Premium for unlimited flashcards!',
-              StatusCodes.FORBIDDEN,
-              { upgradeRequired: true },
-            );
-          }
-        }
+    const { source_ids, count, topics } = body;
 
-        // Gather content from sources using shared utility
-        const { fetchRAGContent, truncateContent } = await import('@/shared/lib/rag/content');
-        const content = await fetchRAGContent(db, workspaceId, source_ids);
+    const { getUserSubscription, getUserUsageStats } = await import('@/shared/lib/paystack/db');
+    const { getPlanDetails, getEffectivePlan } = await import('@/shared/lib/paystack/subscription');
 
-        if (!content || content.trim().length === 0) {
-          return errorResponse(
-            'No source content available. Please upload and process sources first.',
-            StatusCodes.BAD_REQUEST,
-          );
-        }
+    const subscription = await getUserSubscription(userId);
+    const usage = await getUserUsageStats(userId);
+    const effectivePlan = getEffectivePlan(subscription);
+    const plan = getPlanDetails(effectivePlan);
+    const requestedCount = count ?? 10;
+    const flashcardLimit =
+      plan.features.flashcards === 'unlimited' ? Infinity : plan.features.flashcards;
 
-        const truncatedContent = truncateContent(content);
+    if (
+      Number.isFinite(flashcardLimit) &&
+      usage.flashcardsCount + requestedCount > flashcardLimit
+    ) {
+      return errorResponse(
+        'You have reached your flashcard limit. Upgrade your plan for unlimited flashcards.',
+        StatusCodes.FORBIDDEN,
+        { upgradeRequired: effectivePlan === 'free' },
+      );
+    }
 
-        // Generate flashcards with AI
-        const topicString = topics?.join(', ');
-        const prompt = createFlashcardPrompt(truncatedContent, count, topicString);
+    const { fetchRAGContent, truncateContent } = await import('@/shared/lib/rag/content');
+    const content = await fetchRAGContent(db, workspaceId, source_ids);
 
-        const { RAG_CONFIG } = await import('@/shared/lib/rag/config');
-        const response = await getChatCompletion([{ role: 'user', content: prompt }], {
-          temperature: RAG_CONFIG.AI.DEFAULT_TEMPERATURE,
-          maxTokens: RAG_CONFIG.AI.MAX_TOKENS,
-          mockType: 'flashcards',
-        });
+    if (!content || content.trim().length === 0) {
+      return errorResponse(
+        'No source content available. Please upload and process sources first.',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
-        let generatedFlashcards: FlashcardFormat[] = [];
+    const truncatedContent = truncateContent(content);
+    const prompt = createFlashcardPrompt(truncatedContent, count, topics?.join(', '));
 
-        try {
-          const jsonMatch = response.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            generatedFlashcards = JSON.parse(jsonMatch[0]);
-          }
-        } catch (parseError) {
-          console.error('Failed to parse flashcard response:', parseError);
-          return errorResponse('Failed to parse generated flashcards', StatusCodes.INTERNAL_ERROR);
-        }
+    const { consumeAiQueryQuota } = await import('@/shared/lib/paystack/db');
+    const aiQuota = await consumeAiQueryQuota(userId);
+    if (!aiQuota.allowed) {
+      return errorResponse(
+        'You have reached your daily AI query limit. Upgrade your plan for a higher limit.',
+        StatusCodes.FORBIDDEN,
+        { upgradeRequired: aiQuota.limit <= 5 },
+      );
+    }
 
-        if (!generatedFlashcards || generatedFlashcards.length === 0) {
-          return errorResponse(
-            'No flashcards were generated. Please try again.',
-            StatusCodes.INTERNAL_ERROR,
-          );
-        }
+    const { RAG_CONFIG } = await import('@/shared/lib/rag/config');
+    const response = await getChatCompletion([{ role: 'user', content: prompt }], {
+      temperature: RAG_CONFIG.AI.DEFAULT_TEMPERATURE,
+      maxTokens: RAG_CONFIG.AI.MAX_TOKENS,
+      mockType: 'flashcards',
+      responseMimeType: 'application/json',
+      responseSchema: FLASHCARD_RESPONSE_SCHEMA,
+    });
 
-        // Create flashcards in Firestore
-        const initialData = getInitialFlashcardData();
-        const createdFlashcards: GeneratedFlashcard[] = [];
+    let generatedFlashcards: FlashcardFormat[] = [];
 
-        for (const generated of generatedFlashcards) {
-          const flashcardId = crypto.randomUUID();
+    try {
+      generatedFlashcards = JSON.parse(response) as FlashcardFormat[];
+    } catch (parseError) {
+      console.error('Failed to parse flashcard response:', parseError);
+      return errorResponse('Failed to parse generated flashcards', StatusCodes.INTERNAL_ERROR);
+    }
 
-          const flashcardData = {
-            flashcard_id: flashcardId,
-            workspace_id: workspaceId,
-            user_id: userId,
-            source_id: source_ids?.[0] || null,
-            front: generated.front,
-            back: generated.back,
-            tags: generated.tags || [],
-            difficulty: 0,
-            ease_factor: initialData.ease_factor,
-            interval: initialData.interval,
-            repetitions: initialData.repetitions,
-            next_review: initialData.next_review,
-            review_count: 0,
-            created_at: require('firebase-admin/firestore').Timestamp.now(),
-          };
+    if (!generatedFlashcards || generatedFlashcards.length === 0) {
+      return errorResponse(
+        'No flashcards were generated. Please try again.',
+        StatusCodes.INTERNAL_ERROR,
+      );
+    }
 
-          const flashcardRef = await db.collection('flashcards').add(flashcardData);
+    const initialData = getInitialFlashcardData();
+    const createdFlashcards: GeneratedFlashcard[] = [];
 
-          createdFlashcards.push({
-            id: flashcardRef.id,
-            front: generated.front,
-            back: generated.back,
-            tags: generated.tags || [],
-          });
-        }
+    for (const generated of generatedFlashcards) {
+      const flashcardId = crypto.randomUUID();
+      const flashcardRef = await db.collection('flashcards').add({
+        flashcard_id: flashcardId,
+        workspace_id: workspaceId,
+        user_id: userId,
+        source_id: source_ids?.[0] || null,
+        front: generated.front,
+        back: generated.back,
+        tags: generated.tags || [],
+        difficulty: 0,
+        ease_factor: initialData.ease_factor,
+        interval: initialData.interval,
+        repetitions: initialData.repetitions,
+        next_review: initialData.next_review,
+        review_count: 0,
+        created_at: Timestamp.now(),
+      });
 
-        // Increment AI query count
-        const { incrementAiQueryCount } = await import('@/shared/lib/paystack/db');
-        await incrementAiQueryCount(userId);
+      createdFlashcards.push({
+        id: flashcardRef.id,
+        front: generated.front,
+        back: generated.back,
+        tags: generated.tags || [],
+      });
+    }
 
-        return successResponse({
-          flashcards: createdFlashcards,
-          generated_count: createdFlashcards.length,
-        });
-      } catch (error: unknown) {
-        console.error('Error in flashcard generation:', error);
-        return errorResponse('Failed to generate flashcards', StatusCodes.INTERNAL_ERROR);
-      }
-    },
-    async (req, ctx) => {
-      const workspaceId = req.url.split('/workspaces/')[1]?.split('/')[0];
-      if (!workspaceId) return null;
-      const doc = await ctx.db.collection('workspaces').doc(workspaceId).get();
-      if (!doc.exists) return null;
-      return { id: doc.id, ...doc.data() };
-    },
-    (workspace: any) => workspace.user_id,
-  )(request, context);
+    return successResponse({
+      flashcards: createdFlashcards,
+      generated_count: createdFlashcards.length,
+    });
+  } catch (error: unknown) {
+    console.error('Error in flashcard generation:', error);
+    return errorResponse('Failed to generate flashcards', StatusCodes.INTERNAL_ERROR);
+  }
 });

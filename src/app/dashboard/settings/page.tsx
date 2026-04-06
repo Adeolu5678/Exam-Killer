@@ -5,9 +5,8 @@
 // Layer: app  →  thin page assembler
 //
 // FSD Rule: pure UI assembly. Only shared/ui primitives are imported.
-//   No feature-layer imports needed — settings forms contain no business logic
-//   that belongs to a specific feature module. Submission wiring to the backend
-//   is deferred to a follow-up task; this page focuses on the UI assembly.
+//   Limited profile and billing actions are wired here; deeper settings flows
+//   still remain intentionally constrained until the product supports them.
 //
 // Layout: Three tabbed sections  ─  Profile  |  Preferences  |  Billing
 // =============================================================================
@@ -16,8 +15,24 @@ import { useState, useContext, useEffect } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  signOut as firebaseSignOut,
+  updatePassword,
+  updateProfile as updateFirebaseProfile,
+} from 'firebase/auth';
+
 import { AuthContext } from '@/context/AuthContext';
 
+import { auth, isFirebaseConfigured } from '@/shared/lib/firebase/client';
+import type {
+  DeleteProfileResponse,
+  PaymentHistoryResponse,
+  ProfileResponse,
+  UpdateProfileResponse,
+  UserProfile,
+} from '@/shared/types/api';
 import {
   Card,
   CardHeader,
@@ -47,6 +62,16 @@ const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'preferences', label: 'Preferences' },
   { id: 'billing', label: 'Billing' },
 ];
+
+const LEVEL_OPTIONS = ['100', '200', '300', '400', '500', '600', '700'] as const;
+const TUTOR_PERSONALITIES = [
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'drill', label: 'Drill Coach' },
+  { value: 'peer', label: 'Study Peer' },
+  { value: 'professor', label: 'Professor' },
+  { value: 'storyteller', label: 'Storyteller' },
+  { value: 'coach', label: 'Coach' },
+] as const;
 
 // ── Shared actions ──────────────────────────────────────────────────────────
 
@@ -78,24 +103,222 @@ function SignOutButton() {
 // ── Section sub-components ─────────────────────────────────────────────────
 
 function ProfileSection() {
+  const router = useRouter();
   const authContext = useContext(AuthContext);
   const user = authContext?.user;
-  const [userData, setUserData] = useState<any>(null);
+  const subscription = authContext?.subscription;
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const fallbackDisplayName = user?.displayName || '';
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    department: '',
+    level: '',
+    bio: '',
+    preferredTutorPersonality: 'mentor',
+  });
+  const [deleteEmail, setDeleteEmail] = useState('');
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const [deleteCurrentPassword, setDeleteCurrentPassword] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const fetchUserData = async () => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
       try {
-        const res = await fetch('/api/payments/status');
-        if (res.ok) {
-          const data = await res.json();
-          setUserData(data.subscription);
+        const response = await fetch('/api/profile');
+        const data = (await response.json()) as ProfileResponse & { error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load profile');
         }
-      } catch (err) {
-        console.error('Failed to fetch user data');
+
+        if (isMounted) {
+          setProfile(data.profile);
+          const nameParts = (data.profile.full_name || fallbackDisplayName)
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          setFormData({
+            firstName: nameParts[0] ?? '',
+            lastName: nameParts.slice(1).join(' '),
+            department: data.profile.department ?? '',
+            level: data.profile.level ? String(data.profile.level) : '',
+            bio: data.profile.bio ?? '',
+            preferredTutorPersonality: data.profile.preferred_tutor_personality ?? 'mentor',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+      } finally {
+        if (isMounted) {
+          setProfileLoading(false);
+        }
       }
     };
-    fetchUserData();
-  }, []);
+
+    void loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackDisplayName]);
+
+  const fullName = profile?.full_name || user?.displayName || '';
+  const [firstName = '', ...restNameParts] = fullName.trim().split(/\s+/).filter(Boolean);
+  const lastName = restNameParts.join(' ');
+  const initials =
+    (formData.firstName || formData.lastName
+      ? `${formData.firstName} ${formData.lastName}`.trim()
+      : fullName
+    )
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'U';
+  const profileEmail = profile?.email || user?.email || '';
+  const canReset =
+    formData.firstName !== firstName ||
+    formData.lastName !== lastName ||
+    formData.department !== (profile?.department ?? '') ||
+    formData.level !== (profile?.level ? String(profile.level) : '') ||
+    formData.bio !== (profile?.bio ?? '') ||
+    formData.preferredTutorPersonality !== (profile?.preferred_tutor_personality ?? 'mentor');
+
+  const handleFieldChange = (field: keyof typeof formData, value: string) => {
+    setSaveError(null);
+    setSaveSuccess(null);
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleReset = () => {
+    setSaveError(null);
+    setSaveSuccess(null);
+    setFormData({
+      firstName,
+      lastName,
+      department: profile?.department ?? '',
+      level: profile?.level ? String(profile.level) : '',
+      bio: profile?.bio ?? '',
+      preferredTutorPersonality: profile?.preferred_tutor_personality ?? 'mentor',
+    });
+  };
+
+  const handleSave = async () => {
+    const mergedName = `${formData.firstName} ${formData.lastName}`.trim();
+
+    if (!mergedName) {
+      setSaveError('Enter at least a first or last name before saving.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: mergedName,
+          department: formData.department.trim(),
+          level: formData.level ? Number(formData.level) : null,
+          bio: formData.bio.trim() || null,
+          preferred_tutor_personality: formData.preferredTutorPersonality,
+        }),
+      });
+      const data = (await response.json()) as UpdateProfileResponse & { error?: string };
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update profile');
+      }
+
+      if (user) {
+        await updateFirebaseProfile(user, { displayName: mergedName });
+      }
+
+      setProfile(data.profile);
+      setSaveSuccess('Profile updated successfully.');
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to update profile');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const supportsPasswordChange =
+    user?.providerData?.some((provider) => provider.providerId === 'password') ?? false;
+
+  const handleDeleteAccount = async () => {
+    if (!user?.email) {
+      setDeleteError('No authenticated user is available.');
+      return;
+    }
+
+    if (deleteEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
+      setDeleteError('Enter your account email exactly to continue.');
+      return;
+    }
+
+    if (deleteConfirmationText.trim() !== 'DELETE MY ACCOUNT') {
+      setDeleteError('Type DELETE MY ACCOUNT to confirm permanent deletion.');
+      return;
+    }
+
+    setDeleteError(null);
+    setDeleteSuccess(null);
+    setIsDeleting(true);
+
+    try {
+      if (supportsPasswordChange) {
+        if (!deleteCurrentPassword) {
+          throw new Error('Enter your current password before deleting your account.');
+        }
+
+        const credential = EmailAuthProvider.credential(user.email, deleteCurrentPassword);
+        await reauthenticateWithCredential(user, credential);
+      }
+
+      const response = await fetch('/api/profile', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: deleteEmail.trim(),
+          confirmation_text: deleteConfirmationText.trim(),
+        }),
+      });
+
+      const data = (await response.json()) as DeleteProfileResponse & { error?: string };
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete account');
+      }
+
+      setDeleteSuccess('Account deleted. Redirecting...');
+
+      await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => undefined);
+
+      if (isFirebaseConfigured && auth) {
+        await firebaseSignOut(auth).catch(() => undefined);
+      }
+
+      router.replace('/');
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Failed to delete account');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Avatar row */}
@@ -120,7 +343,7 @@ function ProfileSection() {
                 userSelect: 'none',
               }}
             >
-              U
+              {initials}
             </div>
             <div style={{ flex: 1, minWidth: '200px' }}>
               <p style={{ color: 'var(--color-text-primary)', fontWeight: 500, margin: '0 0 4px' }}>
@@ -133,16 +356,10 @@ function ProfileSection() {
                   margin: '0 0 16px',
                 }}
               >
-                JPG, PNG or WebP · Max 2 MB
+                {profileLoading
+                  ? 'Loading your profile data...'
+                  : 'Profile photos are not part of the product yet. Your initials are used consistently across the app.'}
               </p>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button variant="secondary" size="sm">
-                  Upload photo
-                </Button>
-                <Button variant="ghost" size="sm">
-                  Remove
-                </Button>
-              </div>
             </div>
           </div>
         </CardContent>
@@ -158,13 +375,23 @@ function ProfileSection() {
         <CardContent
           style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}
         >
+          {profileLoading && <Badge variant="outline">Loading account details</Badge>}
+          {saveError && <Badge variant="error">{saveError}</Badge>}
+          {saveSuccess && <Badge variant="success">{saveSuccess}</Badge>}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input id="settings-first-name" label="First name" placeholder="Ada" defaultValue="" />
+            <Input
+              id="settings-first-name"
+              label="First name"
+              placeholder="Ada"
+              value={formData.firstName}
+              onChange={(event) => handleFieldChange('firstName', event.target.value)}
+            />
             <Input
               id="settings-last-name"
               label="Last name"
               placeholder="Lovelace"
-              defaultValue=""
+              value={formData.lastName}
+              onChange={(event) => handleFieldChange('lastName', event.target.value)}
             />
           </div>
 
@@ -173,30 +400,105 @@ function ProfileSection() {
             label="Email address"
             type="email"
             placeholder="ada@university.edu"
-            defaultValue=""
-            hint="Used for login and notifications."
+            value={profileEmail}
+            readOnly
+            hint="Used for login and notifications. Email changes are not supported here yet."
           />
 
           <Input
             id="settings-institution"
             label="Institution"
             placeholder="University of Lagos"
-            defaultValue={userData?.institution || ''}
+            value={subscription?.institution || ''}
+            readOnly
           />
 
           <Input
             id="settings-matric"
             label="Matric / Student ID Number"
             placeholder="170805011"
-            defaultValue={userData?.matricNumber || ''}
+            value={subscription?.matricNumber || ''}
+            readOnly
           />
 
-          <Input
-            id="settings-program"
-            label="Program / Department"
-            placeholder="Computer Science, 400L"
-            defaultValue=""
-          />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input
+              id="settings-department"
+              label="Department"
+              placeholder="Computer Science"
+              value={formData.department}
+              onChange={(event) => handleFieldChange('department', event.target.value)}
+            />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label
+                htmlFor="settings-level"
+                style={{
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--color-text-secondary)',
+                  fontWeight: 500,
+                }}
+              >
+                Level
+              </label>
+              <select
+                id="settings-level"
+                value={formData.level}
+                onChange={(event) => handleFieldChange('level', event.target.value)}
+                style={{
+                  minHeight: '42px',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-bg-surface)',
+                  color: 'var(--color-text-primary)',
+                  padding: '0 12px',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                <option value="">Select level</option>
+                {LEVEL_OPTIONS.map((levelOption) => (
+                  <option key={levelOption} value={levelOption}>
+                    {levelOption} Level
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label
+              htmlFor="settings-personality"
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-text-secondary)',
+                fontWeight: 500,
+              }}
+            >
+              Preferred tutor style
+            </label>
+            <select
+              id="settings-personality"
+              value={formData.preferredTutorPersonality}
+              onChange={(event) =>
+                handleFieldChange('preferredTutorPersonality', event.target.value)
+              }
+              style={{
+                minHeight: '42px',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-bg-surface)',
+                color: 'var(--color-text-primary)',
+                padding: '0 12px',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
+              {TUTOR_PERSONALITIES.map((personality) => (
+                <option key={personality.value} value={personality.value}>
+                  {personality.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label
@@ -211,56 +513,25 @@ function ProfileSection() {
             </label>
             <Textarea
               id="settings-bio"
-              placeholder="A short bio visible to workspace collaborators…"
+              placeholder="Tell your future self what you are studying or optimizing for."
               rows={3}
+              value={formData.bio}
+              onChange={(event) => handleFieldChange('bio', event.target.value)}
+              hint="Optional. Shown only in your own settings for now."
             />
           </div>
         </CardContent>
         <CardFooter style={{ padding: '16px 24px', justifyContent: 'flex-end', gap: '8px' }}>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={handleReset} disabled={!canReset || isSaving}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={handleSave} loading={isSaving}>
             Save changes
           </Button>
         </CardFooter>
       </Card>
 
-      {/* Security */}
-      <Card>
-        <CardHeader style={{ padding: '24px 24px 0' }}>
-          <CardTitle style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>Security</CardTitle>
-          <CardDescription>Manage your password and login methods.</CardDescription>
-        </CardHeader>
-        <CardContent
-          style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}
-        >
-          <Input
-            id="settings-current-password"
-            label="Current password"
-            type="password"
-            placeholder="••••••••"
-          />
-          <Input
-            id="settings-new-password"
-            label="New password"
-            type="password"
-            placeholder="••••••••"
-            hint="Min 8 characters, at least one number and one symbol."
-          />
-          <Input
-            id="settings-confirm-password"
-            label="Confirm new password"
-            type="password"
-            placeholder="••••••••"
-          />
-        </CardContent>
-        <CardFooter style={{ padding: '16px 24px', justifyContent: 'flex-end', gap: '8px' }}>
-          <Button variant="primary" size="sm">
-            Update password
-          </Button>
-        </CardFooter>
-      </Card>
+      <SecuritySection />
 
       {/* Account actions */}
       <Card>
@@ -311,11 +582,15 @@ function ProfileSection() {
             Danger zone
           </CardTitle>
         </CardHeader>
-        <CardContent style={{ padding: '16px 24px' }}>
+        <CardContent
+          style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+        >
+          {deleteError && <Badge variant="error">{deleteError}</Badge>}
+          {deleteSuccess && <Badge variant="success">{deleteSuccess}</Badge>}
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: '16px',
@@ -332,11 +607,46 @@ function ProfileSection() {
                   margin: 0,
                 }}
               >
-                Permanently remove your account and all associated data. This cannot be undone.
+                Permanently remove your account and associated data. This cannot be undone.
               </p>
             </div>
-            <Button variant="destructive" size="sm">
-              Delete account
+          </div>
+          <Input
+            id="settings-delete-email"
+            label="Confirm your email"
+            type="email"
+            placeholder="you@example.com"
+            value={deleteEmail}
+            onChange={(event) => setDeleteEmail(event.target.value)}
+            disabled={isDeleting}
+          />
+          <Input
+            id="settings-delete-confirmation"
+            label="Type DELETE MY ACCOUNT"
+            placeholder="DELETE MY ACCOUNT"
+            value={deleteConfirmationText}
+            onChange={(event) => setDeleteConfirmationText(event.target.value)}
+            disabled={isDeleting}
+          />
+          {supportsPasswordChange && (
+            <Input
+              id="settings-delete-password"
+              label="Current password"
+              type="password"
+              placeholder="••••••••"
+              value={deleteCurrentPassword}
+              onChange={(event) => setDeleteCurrentPassword(event.target.value)}
+              disabled={isDeleting}
+            />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteAccount}
+              loading={isDeleting}
+            >
+              Delete account permanently
             </Button>
           </div>
         </CardContent>
@@ -346,6 +656,139 @@ function ProfileSection() {
 }
 
 function PreferencesSection() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const [preferencesSuccess, setPreferencesSuccess] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
+  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [notifications, setNotifications] = useState({
+    due_cards: true,
+    streaks: true,
+    exam_countdowns: true,
+    workspace_invitations: true,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPreferences = async () => {
+      try {
+        const response = await fetch('/api/profile');
+        const data = (await response.json()) as ProfileResponse & { error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load preferences');
+        }
+
+        if (isMounted) {
+          setProfile(data.profile);
+          setTheme(data.profile.theme_preference ?? 'dark');
+          setDensity(data.profile.content_density ?? 'comfortable');
+          setNotifications(
+            data.profile.notification_preferences ?? {
+              due_cards: true,
+              streaks: true,
+              exam_countdowns: true,
+              workspace_invitations: true,
+            },
+          );
+        }
+      } catch (error) {
+        if (isMounted) {
+          setPreferencesError(
+            error instanceof Error ? error.message : 'Failed to load preferences',
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setPreferencesLoading(false);
+        }
+      }
+    };
+
+    void loadPreferences();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const applyTheme = (preference: 'dark' | 'light' | 'system') => {
+    const resolved =
+      preference === 'system'
+        ? window.matchMedia('(prefers-color-scheme: light)').matches
+          ? 'light'
+          : 'dark'
+        : preference;
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.style.colorScheme = resolved;
+    window.localStorage.setItem('exam-killer-theme', preference);
+  };
+
+  const applyDensity = (preference: 'comfortable' | 'compact') => {
+    document.documentElement.setAttribute('data-density', preference);
+    window.localStorage.setItem('exam-killer-density', preference);
+  };
+
+  const savePreferences = async () => {
+    setPreferencesSaving(true);
+    setPreferencesError(null);
+    setPreferencesSuccess(null);
+
+    try {
+      const patchResponse = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: profile?.full_name,
+          theme_preference: theme,
+          content_density: density,
+          notification_preferences: notifications,
+        }),
+      });
+      const patchData = (await patchResponse.json()) as UpdateProfileResponse & { error?: string };
+
+      if (!patchResponse.ok) {
+        throw new Error(patchData.error || 'Failed to save preferences');
+      }
+
+      setProfile(patchData.profile);
+      applyTheme(theme);
+      applyDensity(density);
+      window.localStorage.setItem('exam-killer-notifications', JSON.stringify(notifications));
+      setPreferencesSuccess('Preferences saved.');
+    } catch (error) {
+      setPreferencesError(error instanceof Error ? error.message : 'Failed to save preferences');
+    } finally {
+      setPreferencesSaving(false);
+    }
+  };
+
+  const notificationItems = [
+    {
+      id: 'due_cards' as const,
+      label: 'Daily review reminders',
+      description: 'Remind you when cards are due for review.',
+    },
+    {
+      id: 'streaks' as const,
+      label: 'Streak alerts',
+      description: 'Alert before your study streak breaks.',
+    },
+    {
+      id: 'exam_countdowns' as const,
+      label: 'Exam countdown alerts',
+      description: 'Notify 7 days and 1 day before exam dates.',
+    },
+    {
+      id: 'workspace_invitations' as const,
+      label: 'Workspace invitations',
+      description: 'When a classmate invites you to a workspace.',
+    },
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Appearance */}
@@ -359,6 +802,9 @@ function PreferencesSection() {
         <CardContent
           style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}
         >
+          {preferencesLoading && <Badge variant="outline">Loading preferences</Badge>}
+          {preferencesError && <Badge variant="error">{preferencesError}</Badge>}
+          {preferencesSuccess && <Badge variant="success">{preferencesSuccess}</Badge>}
           {/* Theme selector */}
           <div>
             <p
@@ -372,18 +818,25 @@ function PreferencesSection() {
               Theme
             </p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {(['Dark', 'Light', 'System'] as const).map((t) => (
+              {(
+                [
+                  { label: 'Dark', value: 'dark' },
+                  { label: 'Light', value: 'light' },
+                  { label: 'System', value: 'system' },
+                ] as const
+              ).map((t) => (
                 <button
-                  key={t}
+                  key={t.value}
                   type="button"
+                  onClick={() => setTheme(t.value)}
                   style={{
                     padding: '6px 16px',
                     borderRadius: 'var(--radius-md)',
                     border:
-                      t === 'Dark'
+                      theme === t.value
                         ? '1px solid var(--color-border-accent)'
                         : '1px solid var(--color-border)',
-                    background: t === 'Dark' ? 'var(--color-bg-surface)' : 'transparent',
+                    background: theme === t.value ? 'var(--color-bg-surface)' : 'transparent',
                     color: 'var(--color-text-primary)',
                     cursor: 'pointer',
                     fontSize: 'var(--text-sm)',
@@ -392,7 +845,7 @@ function PreferencesSection() {
                     minWidth: '80px',
                   }}
                 >
-                  {t}
+                  {t.label}
                 </button>
               ))}
             </div>
@@ -411,18 +864,24 @@ function PreferencesSection() {
               Content density
             </p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {(['Comfortable', 'Compact'] as const).map((d) => (
+              {(
+                [
+                  { label: 'Comfortable', value: 'comfortable' },
+                  { label: 'Compact', value: 'compact' },
+                ] as const
+              ).map((d) => (
                 <button
-                  key={d}
+                  key={d.value}
                   type="button"
+                  onClick={() => setDensity(d.value)}
                   style={{
                     padding: '6px 16px',
                     borderRadius: 'var(--radius-md)',
                     border:
-                      d === 'Comfortable'
+                      density === d.value
                         ? '1px solid var(--color-border-accent)'
                         : '1px solid var(--color-border)',
-                    background: d === 'Comfortable' ? 'var(--color-bg-surface)' : 'transparent',
+                    background: density === d.value ? 'var(--color-bg-surface)' : 'transparent',
                     color: 'var(--color-text-primary)',
                     cursor: 'pointer',
                     fontSize: 'var(--text-sm)',
@@ -431,14 +890,14 @@ function PreferencesSection() {
                     minWidth: '120px',
                   }}
                 >
-                  {d}
+                  {d.label}
                 </button>
               ))}
             </div>
           </div>
         </CardContent>
         <CardFooter style={{ padding: '16px 24px', justifyContent: 'flex-end' }}>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={savePreferences} loading={preferencesSaving}>
             Save preferences
           </Button>
         </CardFooter>
@@ -455,31 +914,10 @@ function PreferencesSection() {
         <CardContent
           style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}
         >
-          {[
-            {
-              id: 'notif-due-cards',
-              label: 'Daily review reminders',
-              description: 'Remind you when cards are due for review.',
-            },
-            {
-              id: 'notif-streak',
-              label: 'Streak alerts',
-              description: 'Alert before your study streak breaks.',
-            },
-            {
-              id: 'notif-exam-count',
-              label: 'Exam countdown alerts',
-              description: 'Notify 7 days and 1 day before exam dates.',
-            },
-            {
-              id: 'notif-workspace-inv',
-              label: 'Workspace invitations',
-              description: 'When a classmate invites you to a workspace.',
-            },
-          ].map(({ id, label, description }) => (
+          {notificationItems.map(({ id, label, description }) => (
             <label
               key={id}
-              htmlFor={id}
+              htmlFor={`notif-${id}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -507,9 +945,12 @@ function PreferencesSection() {
               </span>
               {/* Toggle — unstyled checkbox; real implementation should use Radix Switch */}
               <input
-                id={id}
+                id={`notif-${id}`}
                 type="checkbox"
-                defaultChecked
+                checked={notifications[id]}
+                onChange={(event) =>
+                  setNotifications((current) => ({ ...current, [id]: event.target.checked }))
+                }
                 style={{
                   width: '20px',
                   height: '20px',
@@ -522,7 +963,7 @@ function PreferencesSection() {
           ))}
         </CardContent>
         <CardFooter style={{ padding: '16px 24px', justifyContent: 'flex-end' }}>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={savePreferences} loading={preferencesSaving}>
             Save notification settings
           </Button>
         </CardFooter>
@@ -532,11 +973,13 @@ function PreferencesSection() {
 }
 
 function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => void }) {
+  const authContext = useContext(AuthContext);
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentPlanData, setCurrentPlanData] = useState<any>(null);
-  const authContext = useContext(AuthContext);
-  const user = authContext?.user;
+  const [isNavigatingToPayment, setIsNavigatingToPayment] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryResponse['payments']>([]);
+  const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(true);
 
   const handleSubscribe = async (plan: string, trial: boolean = false) => {
     setLoading(true);
@@ -550,31 +993,67 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
       const data = await response.json();
       if (!response.ok || !data.success)
         throw new Error(data.message || 'Failed to initialize payment');
-      if (data.authorizationUrl) window.location.href = data.authorizationUrl;
+      if (data.authorizationUrl) {
+        setIsNavigatingToPayment(true);
+        window.location.href = data.authorizationUrl;
+        return;
+      }
+      setLoading(false);
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
     }
   };
 
-  const [paymentStatus, setPaymentStatus] = useState<any>(null);
+  const subscription = authContext?.subscription;
+  const effectivePlan = subscription?.status === 'active' ? subscription.plan : ('free' as const);
+  const currentPlanLabel =
+    effectivePlan === 'premium_monthly'
+      ? 'Premium Monthly Plan'
+      : effectivePlan === 'premium_annual'
+        ? 'Premium Annual Plan'
+        : 'Free Plan';
+  const currentPlanSummary =
+    effectivePlan === 'premium_monthly'
+      ? 'Unlimited workspaces · 50 AI queries/day · Flexible monthly billing'
+      : effectivePlan === 'premium_annual'
+        ? 'Unlimited workspaces · 100 AI queries/day · Best yearly value'
+        : '1 workspace · 3 file uploads/month · 5 AI queries/day';
 
   useEffect(() => {
-    const fetchStatus = async () => {
+    let isMounted = true;
+
+    const loadPaymentHistory = async () => {
       try {
-        const res = await fetch('/api/payments/status');
-        if (res.ok) {
-          const data = await res.json();
-          setPaymentStatus(data.subscription);
+        const response = await fetch('/api/payments/history');
+        const data = (await response.json()) as PaymentHistoryResponse & { error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load payment history');
         }
-      } catch (err) {
-        console.error('Failed to fetch subscription status');
+
+        if (isMounted) {
+          setPaymentHistory(data.payments);
+        }
+      } catch (historyError) {
+        if (isMounted) {
+          setError(
+            historyError instanceof Error ? historyError.message : 'Failed to load payment history',
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setPaymentHistoryLoading(false);
+        }
       }
     };
-    fetchStatus();
-  }, []);
 
-  const subscription = paymentStatus;
+    void loadPaymentHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -627,7 +1106,7 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                     margin: 0,
                   }}
                 >
-                  Free Plan
+                  {currentPlanLabel}
                 </p>
                 <Badge variant="default">Current</Badge>
               </div>
@@ -638,11 +1117,11 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                   margin: 0,
                 }}
               >
-                3 workspaces · 50 flashcards per deck · Basic AI tutor
+                {currentPlanSummary}
               </p>
             </div>
-            <Button variant="primary" size="sm">
-              Upgrade to Premium
+            <Button variant="primary" size="sm" onClick={() => router.push('/pricing')}>
+              {effectivePlan === 'free' ? 'Upgrade to Premium' : 'Manage subscription'}
             </Button>
           </div>
         </CardContent>
@@ -665,61 +1144,63 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
               period: 'forever',
               badge: null,
               features: [
-                '3 workspaces',
-                '50 flashcards/deck',
-                '20 AI messages/day',
-                'Basic quiz generator',
+                '1 workspace',
+                '3 file uploads/month',
+                '5 AI queries/day',
+                '10 flashcards',
               ],
               current: true,
               cta: null,
               variant: 'ghost' as const,
+              highlight: false,
             },
             {
-              name: 'Premium',
+              name: 'Premium Monthly',
               id: 'premium_monthly',
               price: '₦2,000',
               period: '/month',
-              badge: 'Most popular',
+              badge: 'Flexible monthly',
               features: [
                 'Unlimited workspaces',
                 'Unlimited flashcards',
-                'Unlimited AI messages',
-                'Advanced quiz generator',
-                'Study plan & exam countdown',
-                'Priority support',
+                '50 AI queries/day',
+                '2-day free trial',
+                'All tutor personalities',
+                'Ideal for month-to-month flexibility',
               ],
               cta: 'Start 2-Day Trial',
               variant: 'primary' as const,
               trial: true,
+              highlight: false,
             },
             {
               name: 'Annual',
               id: 'premium_annual',
               price: '₦20,000',
               period: '/year',
-              badge: 'Save 17%',
+              badge: 'Best value — Save ₦4,000/year',
               features: [
-                'Everything in Premium',
-                '1 Week Free Trial',
-                'Dedicated onboarding call',
-                'Export to Anki & PDF',
+                'Everything in Monthly',
+                '100 AI queries/day',
+                '7-day free trial',
+                'Priority support + early access',
               ],
-              cta: 'Start 1-Week Trial',
+              cta: 'Start 7-Day Trial',
               variant: 'secondary' as const,
               trial: true,
+              highlight: true,
             },
           ].map((plan) => (
             <div
               key={plan.name}
               style={{
                 flex: '1 1 220px',
-                border:
-                  plan.name === 'Premium'
-                    ? '1px solid var(--color-border-accent)'
-                    : '1px solid var(--color-border)',
+                border: plan.highlight
+                  ? '1px solid var(--color-border-accent)'
+                  : '1px solid var(--color-border)',
                 borderRadius: 'var(--radius-lg)',
                 padding: '20px',
-                background: plan.name === 'Premium' ? 'var(--color-primary-glow)' : 'transparent',
+                background: plan.highlight ? 'var(--color-primary-glow)' : 'transparent',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
@@ -732,9 +1213,7 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                   {plan.name}
                 </span>
                 {plan.badge && (
-                  <Badge variant={plan.name === 'Annual' ? 'warning' : 'primary'}>
-                    {plan.badge}
-                  </Badge>
+                  <Badge variant={plan.highlight ? 'warning' : 'primary'}>{plan.badge}</Badge>
                 )}
               </div>
               <div>
@@ -784,8 +1263,8 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                   size="sm"
                   style={{ marginTop: 'auto' }}
                   onClick={() => handleSubscribe(plan.id!, plan.trial)}
-                  disabled={loading}
-                  loading={loading}
+                  disabled={loading || isNavigatingToPayment}
+                  loading={loading || isNavigatingToPayment}
                 >
                   {plan.cta}
                 </Button>
@@ -804,21 +1283,207 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
         </CardContent>
       </Card>
 
-      {/* Payment history placeholder */}
+      {/* Payment history */}
       <Card>
         <CardHeader style={{ padding: '24px 24px 0' }}>
           <CardTitle style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>
             Payment history
           </CardTitle>
-          <CardDescription>Your recent transactions will appear here.</CardDescription>
+          <CardDescription>
+            Your recent transactions and trial activations appear here.
+          </CardDescription>
         </CardHeader>
-        <CardContent style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
-            No payments yet. Upgrade to see your invoice history.
-          </p>
+        <CardContent style={{ padding: '24px' }}>
+          {paymentHistoryLoading ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
+              Loading payment history...
+            </p>
+          ) : paymentHistory.length === 0 ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
+              No payment records yet.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {paymentHistory.map((payment) => (
+                <div
+                  key={payment.reference}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '16px',
+                    padding: '14px 16px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'var(--color-bg-surface)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ minWidth: '220px' }}>
+                    <p style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: 0 }}>
+                      {payment.plan === 'premium_annual'
+                        ? 'Premium Annual'
+                        : payment.plan === 'premium_monthly'
+                          ? 'Premium Monthly'
+                          : 'Free / Trial'}
+                    </p>
+                    <p
+                      style={{
+                        color: 'var(--color-text-secondary)',
+                        fontSize: 'var(--text-xs)',
+                        margin: '4px 0 0',
+                      }}
+                    >
+                      Ref: {payment.reference}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: 0 }}>
+                      ₦{(payment.amount / 100).toLocaleString()}
+                    </p>
+                    <p
+                      style={{
+                        color: 'var(--color-text-secondary)',
+                        fontSize: 'var(--text-xs)',
+                        margin: '4px 0 0',
+                      }}
+                    >
+                      {new Date(payment.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={
+                      payment.status === 'success'
+                        ? 'success'
+                        : payment.status === 'failed'
+                          ? 'error'
+                          : 'warning'
+                    }
+                  >
+                    {payment.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function SecuritySection() {
+  const authContext = useContext(AuthContext);
+  const user = authContext?.user;
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const supportsPasswordChange =
+    user?.providerData?.some((provider) => provider.providerId === 'password') ?? false;
+
+  const handlePasswordUpdate = async () => {
+    if (!user || !user.email) {
+      setPasswordError('No authenticated user is available.');
+      return;
+    }
+
+    if (!supportsPasswordChange) {
+      setPasswordError('Password changes are only available for email/password accounts.');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordSuccess('Password updated successfully.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to update password. Try again.';
+      setPasswordError(message);
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader style={{ padding: '24px 24px 0' }}>
+        <CardTitle style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>Security</CardTitle>
+        <CardDescription>Manage your password and login methods.</CardDescription>
+      </CardHeader>
+      <CardContent
+        style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+      >
+        {!supportsPasswordChange && (
+          <Badge variant="outline">
+            This account uses Google sign-in. Password changes are unavailable.
+          </Badge>
+        )}
+        {passwordError && <Badge variant="error">{passwordError}</Badge>}
+        {passwordSuccess && <Badge variant="success">{passwordSuccess}</Badge>}
+        <Input
+          id="settings-current-password"
+          label="Current password"
+          type="password"
+          placeholder="••••••••"
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+          disabled={!supportsPasswordChange || isUpdatingPassword}
+        />
+        <Input
+          id="settings-new-password"
+          label="New password"
+          type="password"
+          placeholder="••••••••"
+          hint="Use at least 8 characters."
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+          disabled={!supportsPasswordChange || isUpdatingPassword}
+        />
+        <Input
+          id="settings-confirm-password"
+          label="Confirm new password"
+          type="password"
+          placeholder="••••••••"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          disabled={!supportsPasswordChange || isUpdatingPassword}
+        />
+      </CardContent>
+      <CardFooter style={{ padding: '16px 24px', justifyContent: 'flex-end', gap: '8px' }}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handlePasswordUpdate}
+          loading={isUpdatingPassword}
+          disabled={!supportsPasswordChange}
+        >
+          Update password
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -826,6 +1491,8 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const authContext = useContext(AuthContext);
+  const user = authContext?.user;
 
   return (
     <section
@@ -856,6 +1523,16 @@ export default function SettingsPage() {
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
           Manage your profile, preferences, and subscription.
         </p>
+        {user?.email && (
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
+            Signed in as {user.email}
+          </p>
+        )}
+        <div className="mt-2">
+          <Badge variant="success">
+            Profile, password, theme, notification, billing, and account-deletion flows are live.
+          </Badge>
+        </div>
       </header>
 
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}

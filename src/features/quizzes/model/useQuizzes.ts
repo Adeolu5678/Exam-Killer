@@ -10,15 +10,7 @@ import { toast } from 'sonner';
 
 import { quizKeys } from './types';
 import type { GenerateQuizPayload, QuizSubmission } from './types';
-import {
-  fetchQuizzes,
-  fetchQuiz,
-  generateQuiz,
-  submitQuiz,
-  deleteQuiz,
-  generateNlmQuiz,
-  getNlmNotebook,
-} from '../api/quizzesApi';
+import { fetchQuizzes, fetchQuiz, generateQuiz, submitQuiz, deleteQuiz } from '../api/quizzesApi';
 
 // ---------------------------------------------------------------------------
 // Read hooks
@@ -56,6 +48,20 @@ export function useGenerateQuiz(workspaceId: string) {
     mutationFn: (payload: GenerateQuizPayload) => generateQuiz(workspaceId, payload),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: quizKeys.list(workspaceId) });
+      toast.success('Quiz generated successfully!');
+    },
+    onError: (err: any) => {
+      if (err.upgradeRequired || err.message?.includes('Upgrade')) {
+        toast.error('Limit exceeded', {
+          description: 'Upgrade to Premium for unlimited AI quiz generation.',
+          action: {
+            label: 'Upgrade',
+            onClick: () => (window.location.href = '/pricing'),
+          },
+        });
+      } else {
+        toast.error(err.message || 'Failed to generate quiz');
+      }
     },
   });
 }
@@ -82,33 +88,14 @@ export function useDeleteQuiz(workspaceId: string) {
       );
       return { snapshot };
     },
-    onError: (_err, _id, ctx) => {
+    onError: (err, _id, ctx) => {
       if (ctx?.snapshot) {
         qc.setQueryData(quizKeys.list(workspaceId), ctx.snapshot);
       }
+      toast.error(err instanceof Error ? err.message : 'Failed to delete quiz');
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: quizKeys.list(workspaceId) });
-    },
-  });
-}
-
-/** Generate a quiz via NotebookLM */
-export function useGenerateNlmQuiz(workspaceId: string) {
-  const qc = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      const notebook = await getNlmNotebook(workspaceId);
-      if (!notebook) throw new Error('No linked NotebookLM notebook found for this workspace.');
-      return generateNlmQuiz(notebook.notebook_id, workspaceId);
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: quizKeys.list(workspaceId) });
-      toast.success('Quiz generated via NLM!');
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'NLM Quiz generation failed');
     },
   });
 }

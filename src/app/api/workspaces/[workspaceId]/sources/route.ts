@@ -12,9 +12,10 @@ const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/gif',
   'image/webp',
+  'text/plain', // allow plain text uploads
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // Increased to match frontend (50MB)
 
 // Native UUID generation is preferred
 
@@ -51,7 +52,16 @@ async function verifyWorkspaceAccess(
   }
 
   const isOwner = workspaceData.user_id === userId;
-  const hasAccess = isOwner || workspaceData.is_public === true;
+
+  const memberSnapshot = await db
+    .collection('workspace_members')
+    .where('workspace_id', '==', workspaceId)
+    .where('user_id', '==', userId)
+    .limit(1)
+    .get();
+
+  const isMember = !memberSnapshot.empty;
+  const hasAccess = isOwner || isMember || workspaceData.is_public === true;
 
   return { exists: true, hasAccess, isOwner };
 }
@@ -127,6 +137,19 @@ export const POST = withAuth(async (request, { db, userId }) => {
     return errorResponse('Access denied', StatusCodes.FORBIDDEN);
   }
 
+  const { getUserSubscription, getUserUsageStats } = await import('@/shared/lib/paystack/db');
+  const { checkUserLimits } = await import('@/shared/lib/paystack/subscription');
+  const subscription = await getUserSubscription(userId);
+  const usage = await getUserUsageStats(userId);
+  const limits = checkUserLimits(subscription, usage);
+  if (!limits.canProceed && limits.exceededLimits?.includes('fileUploads')) {
+    return errorResponse(
+      'You have reached your monthly file upload limit. Upgrade your plan for more uploads.',
+      StatusCodes.FORBIDDEN,
+      { upgradeRequired: true },
+    );
+  }
+
   const storage = getAdminStorage();
   if (!storage) {
     return errorResponse('Storage not configured', StatusCodes.INTERNAL_ERROR);
@@ -147,7 +170,7 @@ export const POST = withAuth(async (request, { db, userId }) => {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return errorResponse('File size exceeds 10MB limit', StatusCodes.BAD_REQUEST);
+    return errorResponse('File size exceeds 50MB limit', StatusCodes.BAD_REQUEST);
   }
 
   const sourceId = crypto.randomUUID();
@@ -192,12 +215,15 @@ export const POST = withAuth(async (request, { db, userId }) => {
 
   const sourceRef = await db.collection('sources').add(sourceData);
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const baseUrl = new URL(request.url).origin;
+  const cookieHeader = request.headers.get('cookie');
 
   fetch(`${baseUrl}/api/sources/${sourceRef.id}/process`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+    },
   })
     .then(async (processResponse) => {
       if (processResponse.ok) {

@@ -20,7 +20,10 @@ import {
   Settings,
   Zap,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react';
+
+import type { ProfileResponse } from '@/shared/types/api';
 
 // ---------------------------------------------------------------------------
 // Nav item definition
@@ -152,6 +155,33 @@ interface SidebarNavProps {
 
 export function SidebarNav({ collapsed, onItemClick, onLogout }: SidebarNavProps) {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      try {
+        const response = await fetch('/api/profile');
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as ProfileResponse;
+        if (isMounted) {
+          setIsAdmin(Boolean(data.profile.is_admin));
+        }
+      } catch {
+        // Ignore sidebar admin lookup errors and keep the default nav.
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <nav
@@ -167,6 +197,19 @@ export function SidebarNav({ collapsed, onItemClick, onLogout }: SidebarNavProps
           onItemClick={onItemClick}
         />
       ))}
+
+      {isAdmin && (
+        <NavItem
+          item={{
+            href: '/admin/verifications',
+            label: 'Admin Review',
+            icon: <ShieldCheck size={18} aria-hidden="true" />,
+          }}
+          collapsed={collapsed}
+          pathname={pathname}
+          onItemClick={onItemClick}
+        />
+      )}
 
       {onLogout && (
         <NavAction

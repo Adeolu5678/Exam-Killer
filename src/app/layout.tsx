@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 
+import Script from 'next/script';
+
 import { GeistMono } from 'geist/font/mono';
 import { GeistSans } from 'geist/font/sans';
 import { Toaster } from 'sonner';
@@ -38,6 +40,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       data-theme="dark"
+      data-density="comfortable"
+      suppressHydrationWarning
       style={
         {
           '--font-display': GeistSans.style.fontFamily,
@@ -47,6 +51,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }
     >
       <body className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(() => {
+            try {
+              const stored = window.localStorage.getItem('exam-killer-theme');
+              const theme = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+              const resolved = theme === 'system'
+                ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+                : theme;
+              const density = window.localStorage.getItem('exam-killer-density');
+              document.documentElement.setAttribute('data-theme', resolved);
+              document.documentElement.setAttribute(
+                'data-density',
+                density === 'compact' ? 'compact' : 'comfortable'
+              );
+              document.documentElement.style.colorScheme = resolved;
+            } catch {}
+          })();`}
+        </Script>
         <AuthProvider>{children}</AuthProvider>
         <Toaster theme="dark" richColors position="top-center" />
       </body>

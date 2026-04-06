@@ -17,11 +17,11 @@ const AnalyticsPageShell = dynamic(
 );
 
 interface AnalyticsPageProps {
-  params: { id: string };
+  params: { workspaceId: string };
 }
 
 export default function AnalyticsPage({ params }: AnalyticsPageProps) {
-  return <AnalyticsPageShell workspaceId={params.id} />;
+  return <AnalyticsPageShell workspaceId={params.workspaceId} />;
 }
 
 export const metadata = {

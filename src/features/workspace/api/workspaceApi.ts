@@ -84,7 +84,7 @@ export async function updateWorkspace(
   payload: UpdateWorkspaceRequest,
 ): Promise<UpdateWorkspaceResponse> {
   return apiFetch<UpdateWorkspaceResponse>(`/api/workspaces/${id}`, {
-    method: 'PATCH',
+    method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
@@ -125,15 +125,27 @@ export async function inviteMember(
 }
 
 /**
- * Create a NotebookLM notebook for a workspace.
- * This is a secondary action after workspace creation.
+ * Update a member role inside a workspace.
  */
-export async function createNlmNotebook(
+export async function updateWorkspaceMemberRole(
   workspaceId: string,
-  title: string,
-): Promise<{ notebook_id: string }> {
-  return apiFetch<{ notebook_id: string }>('/api/notebooklm/notebooks', {
-    method: 'POST',
-    body: JSON.stringify({ workspaceId, title }),
+  memberId: string,
+  role: 'admin' | 'member',
+): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ role }),
+  });
+}
+
+/**
+ * Remove a member from a workspace.
+ */
+export async function removeWorkspaceMember(
+  workspaceId: string,
+  memberId: string,
+): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+    method: 'DELETE',
   });
 }

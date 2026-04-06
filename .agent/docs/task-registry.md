@@ -2,7 +2,8 @@
 
 > **Purpose**: Central tracking for all tasks with priorities and status.
 > **Project**: Exam-Killer
-> **Last Updated**: 2026-03-07
+> **Last Updated**: 2026-03-21
+> **Quick Stats**: Total: 55, Pending: 0, Completed: 55
 
 ---
 
@@ -32,22 +33,30 @@
 
 ### P0 - Critical
 
-| ID  | Task       | Status | Assignee | Handoff |
-| --- | ---------- | ------ | -------- | ------- |
-| —   | _No tasks_ | —      | —        | —       |
+| ID       | Task                                                              | Status       | Dependencies | Handoff |
+| -------- | ----------------------------------------------------------------- | ------------ | ------------ | ------- |
+| TASK-047 | Port Kilo Gateway + Gemini Embeddings to NoteBookLM Branch        | ✅ COMPLETED | —            | —       |
+| TASK-048 | Verify Kilo+Gemini Migration on NoteBookLM Branch (Audit + Build) | ✅ COMPLETED | TASK-047     | —       |
+| TASK-049 | Remove NLM Wiring from All Feature Hooks (Kilo-only)              | ✅ COMPLETED | —            | —       |
+| TASK-050 | Delete NLM API Routes, Shared Lib & Studio Feature Module         | ✅ COMPLETED | TASK-049     | —       |
+| TASK-052 | Pre-Production Audit: API Routes & Auth Layer                     | ✅ COMPLETED | —            | —       |
+| TASK-053 | Pre-Production Audit: Feature Hook Data Flow & Error States       | ✅ COMPLETED | —            | —       |
+| TASK-054 | Pre-Production Audit: Auth Flow, Session & Firestore Security     | ✅ COMPLETED | —            | —       |
 
 ### P1 - High Priority
 
-| ID       | Task                                                   | Status         | Dependencies | Handoff |
-| -------- | ------------------------------------------------------ | -------------- | ------------ | ------- |
-| TASK-017 | Refactor App Router Layouts & Remove Global Navbar     | ⬚ PENDING      | —            | —       |
-| TASK-018 | Implement Premium Design System (Tailwind Config)      | 🔄 IN PROGRESS | TASK-017     | —       |
-| TASK-019 | Redesign Dashboard & Workspace UI (Premium Aesthetics) | ⬚ PENDING      | TASK-018     | —       |
-| TASK-020 | Build Missing Workspace Feature Pages                  | ⬚ PENDING      | TASK-019     | —       |
-| TASK-013 | Comprehensive Audit of Next.js App Router Pages        | ✅ COMPLETED   | —            | —       |
-| TASK-014 | Comprehensive Audit of Backend API Routes              | ✅ COMPLETED   | —            | —       |
-| TASK-015 | Comprehensive Audit of React Components                | ✅ COMPLETED   | —            | —       |
-| TASK-016 | Comprehensive Audit of Core Logic & Utilities          | ✅ COMPLETED   | —            | —       |
+| ID       | Task                                                   | Status       | Dependencies | Handoff |
+| -------- | ------------------------------------------------------ | ------------ | ------------ | ------- |
+| TASK-051 | Replace Studio Page with Polished "Coming Soon" UI     | ✅ COMPLETED | TASK-050     | —       |
+| TASK-055 | Pre-Production Audit: UI Rendering & Loading States    | ✅ COMPLETED | —            | —       |
+| TASK-017 | Refactor App Router Layouts & Remove Global Navbar     | ✅ COMPLETED | —            | —       |
+| TASK-018 | Implement Premium Design System (Tailwind Config)      | ✅ COMPLETED | TASK-017     | —       |
+| TASK-019 | Redesign Dashboard & Workspace UI (Premium Aesthetics) | ✅ COMPLETED | TASK-018     | —       |
+| TASK-020 | Build Missing Workspace Feature Pages                  | ✅ COMPLETED | TASK-019     | —       |
+| TASK-013 | Comprehensive Audit of Next.js App Router Pages        | ✅ COMPLETED | —            | —       |
+| TASK-014 | Comprehensive Audit of Backend API Routes              | ✅ COMPLETED | —            | —       |
+| TASK-015 | Comprehensive Audit of React Components                | ✅ COMPLETED | —            | —       |
+| TASK-016 | Comprehensive Audit of Core Logic & Utilities          | ✅ COMPLETED | —            | —       |
 
 ### P2 - Medium Priority
 
@@ -944,8 +953,51 @@ Add "Studio" pill link to `WorkspaceShell` sub-nav.
 
 ## 📌 Quick Stats
 
-- **Total Tasks**: 46
-- **Pending**: 0
+- **Total Tasks**: 51
+- **Pending**: 2
 - **In Progress**: 0
-- **Completed**: 46
+- **Completed**: 49
 - **Blocked**: 0
+
+---
+
+## 🧱 TASK-047 — Port Kilo Gateway + Gemini Embeddings to NoteBookLM Branch (P0)
+
+**Status**: ⬚ PENDING
+**Priority**: P0 🔴 CRITICAL
+**Context**: `.agent/contexts/TASK-047.md`
+
+### Summary
+
+The NoteBookLM branch still uses the original OpenAI client (`gpt-4o`). This task ports the
+complete AI provider migration from the Kilo branch: `client.ts` is replaced with the
+Kilo Gateway + Gemini version. Three files change, the entire NLM integration is untouched.
+
+### Files to Modify
+
+| File                                 | Change                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| `src/shared/lib/openai/client.ts`    | Full replacement — Kilo Gateway for chat, Gemini for embeddings             |
+| `src/shared/lib/openai/mock-data.ts` | Gate on `KILO_API_KEY`; mock embedding → 768 dims                           |
+| `package.json`                       | Add `@google/generative-ai` if absent (`npm install @google/generative-ai`) |
+| `.env.example`                       | Add `KILO_API_KEY=` and `GEMINI_API_KEY=` entries                           |
+
+### Do NOT Touch
+
+- `src/shared/lib/notebooklm/` — all NLM infrastructure stays exactly as-is
+- `src/app/api/notebooklm/` — all NLM routes stay exactly as-is
+
+---
+
+## 🧱 TASK-048 — Verify Kilo+Gemini Migration on NoteBookLM Branch (P0)
+
+**Status**: ⬚ PENDING
+**Priority**: P0 🔴 CRITICAL
+**Dependencies**: TASK-047 must be completed first
+**Context**: `.agent/contexts/TASK-048.md`
+
+### Summary
+
+Audit pass. Confirm `client.ts` uses Kilo/Gemini, NLM files are unaffected, all 5 general AI
+routes still wire through `getChatCompletion`, and `tsc --noEmit` + `npm run lint` both pass
+clean.

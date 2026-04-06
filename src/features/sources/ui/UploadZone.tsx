@@ -77,17 +77,21 @@ export function UploadZone({ workspaceId, className }: UploadZoneProps) {
       enqueueFiles(entries);
 
       // Upload each file via the mutation (which will re-enqueue internally with XHR)
-      valid.forEach((f) => {
-        upload(f, {
-          onError: (err) => {
-            toast.error(
-              `Failed to upload ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            );
+      valid.forEach((f, idx) => {
+        const entry = entries[idx];
+        upload(
+          { file: f, id: entry.id },
+          {
+            onError: (err) => {
+              toast.error(
+                `Failed to upload ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              );
+            },
+            onSuccess: () => {
+              toast.success(`Uploaded ${f.name} successfully`);
+            },
           },
-          onSuccess: () => {
-            toast.success(`Uploaded ${f.name} successfully`);
-          },
-        });
+        );
       });
     },
     [upload, enqueueFiles],

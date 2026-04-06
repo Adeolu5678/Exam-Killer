@@ -28,7 +28,7 @@ export interface QuizQuestion {
 
 export interface QuizAnswer {
   question_id: string;
-  answer: string;
+  answer: string | null;
   time_spent_seconds: number;
 }
 
@@ -150,11 +150,14 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
     try {
       const answers: QuizAnswer[] = currentQuiz.questions.map((question) => {
-        const startTime = questionStartTimes[question.id] || Date.now();
-        const timeSpent = Math.floor((Date.now() - startTime) / 1000);
+        const startTime = questionStartTimes[question.id];
+        const timeSpent =
+          typeof startTime === 'number'
+            ? Math.max(0, Math.floor((Date.now() - startTime) / 1000))
+            : 0;
         return {
           question_id: question.id,
-          answer: userAnswers[question.id] || '',
+          answer: userAnswers[question.id] ?? null,
           time_spent_seconds: timeSpent,
         };
       });
@@ -167,11 +170,12 @@ export const useQuizStore = create<QuizState>((set, get) => ({
         body: JSON.stringify({ answers }),
       });
 
-      const data: SubmitQuizResponse = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.result ? 'Failed to submit quiz' : 'Failed to submit quiz');
+        const errBody = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errBody.error || 'Failed to submit quiz');
       }
+
+      const data: SubmitQuizResponse = await response.json();
 
       set({
         status: 'completed',

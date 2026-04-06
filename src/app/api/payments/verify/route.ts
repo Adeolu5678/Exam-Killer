@@ -102,7 +102,7 @@ export const GET = withAuth(async (request, { db, userId }) => {
   }
 
   await updatePaymentStatus(reference, 'success', {
-    transaction_id: verifyResult.data?.customer?.email,
+    transaction_id: reference,
     payment_method: 'card',
   });
 

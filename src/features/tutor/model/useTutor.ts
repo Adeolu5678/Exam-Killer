@@ -11,16 +11,12 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
 
 import { useTutorStore } from './tutorStore';
 import type { ChatMessage, CitationChip } from './types';
 import type { TutorPersonalityId } from './types';
-import {
-  sendMessageStream,
-  fetchConversationHistory,
-  getNlmNotebook,
-  sendNlmQuery,
-} from '../api/tutorApi';
+import { sendMessageStream, fetchConversationHistory } from '../api/tutorApi';
 
 // ---------------------------------------------------------------------------
 // useConversation — manages the local message array
@@ -50,7 +46,11 @@ export function useConversation(workspaceId: string) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }, []);
 
-  return { messages, isLoadingHistory, loadHistory, appendMessage, updateMessage };
+  const removeMessage = useCallback((id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  return { messages, isLoadingHistory, loadHistory, appendMessage, updateMessage, removeMessage };
 }
 
 // ---------------------------------------------------------------------------
@@ -59,12 +59,16 @@ export function useConversation(workspaceId: string) {
 
 export function useSendMessage({
   workspaceId,
+  messages,
   appendMessage,
   updateMessage,
+  removeMessage,
 }: {
   workspaceId: string;
+  messages: ChatMessage[];
   appendMessage: (msg: ChatMessage) => void;
   updateMessage: (id: string, patch: Partial<ChatMessage>) => void;
+  removeMessage: (id: string) => void;
 }) {
   const { selectedPersonality, inputValue, setInputValue, setIsStreaming, setStreamingMessageId } =
     useTutorStore();
@@ -103,43 +107,21 @@ export function useSendMessage({
       isStreamingRef.current = true;
 
       try {
-        // 3. Try NLM first if available
-        let nlmNotebook = null;
-        try {
-          nlmNotebook = await getNlmNotebook(workspaceId);
-        } catch (err) {
-          console.error('Failed to check for NLM notebook:', err);
-        }
-
-        if (nlmNotebook) {
-          try {
-            const { answer } = await sendNlmQuery(nlmNotebook.notebook_id, workspaceId, text);
-            updateMessage(assistantMsgId, {
-              content: answer,
-              isStreaming: false,
-            });
-            setIsStreaming(false);
-            setStreamingMessageId(null);
-            isStreamingRef.current = false;
-            return; // Success with NLM
-          } catch (err: any) {
-            console.warn('NLM Query failed, falling back to OpenAI:', err);
-            // Fall through to OpenAI if quota exhausted OR any error
-          }
-        }
-
         // 4. Default OpenAI Streaming path
         const stream = await sendMessageStream({
           workspaceId,
           message: text,
           personalityId: personality,
-          history: [],
+          history: messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
           stream: true,
         });
 
         const reader = stream.getReader();
         const decoder = new TextDecoder();
-        let accumulatedContent = '';
+        let rawResponse = '';
         let finalCitations: CitationChip[] = [];
 
         while (true) {
@@ -147,21 +129,29 @@ export function useSendMessage({
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
+          rawResponse += chunk;
 
-          // The API may send JSON citations as a last chunk: [CITATIONS]:base64
-          if (chunk.startsWith('[CITATIONS]:')) {
-            try {
-              const raw = chunk.replace('[CITATIONS]:', '');
-              finalCitations = JSON.parse(atob(raw)) as CitationChip[];
-            } catch {
-              // not a citations chunk
-            }
-          } else {
-            accumulatedContent += chunk;
-            updateMessage(assistantMsgId, {
-              content: accumulatedContent,
-              isStreaming: true,
-            });
+          const markerIndex = rawResponse.indexOf('[CITATIONS]:');
+          const visibleContent =
+            markerIndex === -1 ? rawResponse : rawResponse.slice(0, markerIndex);
+
+          updateMessage(assistantMsgId, {
+            content: visibleContent,
+            isStreaming: true,
+          });
+        }
+
+        const markerIndex = rawResponse.indexOf('[CITATIONS]:');
+        let accumulatedContent = rawResponse;
+
+        if (markerIndex !== -1) {
+          accumulatedContent = rawResponse.slice(0, markerIndex);
+          const rawCitations = rawResponse.slice(markerIndex + '[CITATIONS]:'.length);
+
+          try {
+            finalCitations = JSON.parse(atob(rawCitations)) as CitationChip[];
+          } catch {
+            finalCitations = [];
           }
         }
 
@@ -172,12 +162,10 @@ export function useSendMessage({
           isStreaming: false,
         });
       } catch (err) {
+        removeMessage(assistantMsgId);
         const errorText =
           err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-        updateMessage(assistantMsgId, {
-          content: errorText,
-          isStreaming: false,
-        });
+        toast.error(errorText);
       } finally {
         setIsStreaming(false);
         setStreamingMessageId(null);
@@ -188,8 +176,10 @@ export function useSendMessage({
       inputValue,
       selectedPersonality,
       workspaceId,
+      messages,
       appendMessage,
       updateMessage,
+      removeMessage,
       setInputValue,
       setIsStreaming,
       setStreamingMessageId,

@@ -1,18 +1,21 @@
 import { NextRequest } from 'next/server';
 
-import { Firestore } from 'firebase-admin/firestore';
+import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
 import {
   withAuth,
-  withOwnership,
   parseBodyWithZod,
   errorResponse,
   successResponse,
   StatusCodes,
 } from '@/shared/lib/api/auth';
 import { getChatCompletion } from '@/shared/lib/openai/client';
-import { createQuizPrompt, type QuizQuestionType } from '@/shared/lib/openai/prompts';
+import {
+  createQuizPrompt,
+  QUIZ_RESPONSE_SCHEMA,
+  type QuizQuestionType,
+} from '@/shared/lib/openai/prompts';
 
 interface GenerateQuizBody {
   source_ids?: string[];
@@ -33,6 +36,11 @@ interface QuizQuestionFormat {
 
 // Redundant functions removed (handled by withOwnership or route structure)
 
+function getWorkspaceIdFromRequest(request: NextRequest): string | null {
+  const pathParts = new URL(request.url).pathname.split('/');
+  return pathParts[3] || null;
+}
+
 const GenerateQuizSchema = z.object({
   source_ids: z.array(z.string()).optional(),
   count: z.number().int().min(1).max(50).default(10),
@@ -42,157 +50,138 @@ const GenerateQuizSchema = z.object({
 
 export const POST = withAuth(async (request, context) => {
   const { db, userId } = context;
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(request);
+    if (!workspaceId) {
+      return errorResponse('Workspace not found', StatusCodes.NOT_FOUND);
+    }
 
-  return withOwnership(
-    async (req, ctx, workspace) => {
-      try {
-        const workspaceId = workspace.id;
-        const { data: body, error } = await parseBodyWithZod(req, GenerateQuizSchema);
+    const workspaceDoc = await db.collection('workspaces').doc(workspaceId).get();
+    if (!workspaceDoc.exists) {
+      return errorResponse('Workspace not found', StatusCodes.NOT_FOUND);
+    }
 
-        if (error) return error;
-        if (!body) return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
+    const workspaceData = workspaceDoc.data();
+    const memberSnapshot = await db
+      .collection('workspace_members')
+      .where('workspace_id', '==', workspaceId)
+      .where('user_id', '==', userId)
+      .limit(1)
+      .get();
 
-        const { source_ids, count, question_types, topics } = body;
+    if (!workspaceData || (workspaceData.user_id !== userId && memberSnapshot.empty)) {
+      return errorResponse('Workspace not found or access denied', StatusCodes.NOT_FOUND);
+    }
 
-        // Check subscription limits
-        const { getUserSubscription, getUserUsageStats } = await import('@/shared/lib/paystack/db');
-        const subscription = await getUserSubscription(userId);
+    const { data: body, error } = await parseBodyWithZod(request, GenerateQuizSchema);
 
-        if (subscription) {
-          const { checkUserLimits } = await import('@/shared/lib/paystack/subscription');
-          const usage = await getUserUsageStats(userId);
-          const limits = checkUserLimits(subscription, usage);
+    if (error) return error;
+    if (!body) return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
 
-          if (!limits.canProceed) {
-            return errorResponse(
-              'Quiz limit exceeded. Upgrade to Premium for unlimited quizzes!',
-              StatusCodes.FORBIDDEN,
-              { upgradeRequired: true },
-            );
-          }
-        }
+    const { source_ids, count, question_types, topics } = body;
 
-        // Gather content from sources using shared utility
-        const { fetchRAGContent, truncateContent } = await import('@/shared/lib/rag/content');
-        const content = await fetchRAGContent(db, workspaceId, source_ids);
+    const { fetchRAGContent, truncateContent } = await import('@/shared/lib/rag/content');
+    const content = await fetchRAGContent(db, workspaceId, source_ids);
 
-        if (!content || content.trim().length === 0) {
-          return errorResponse(
-            'No source content available. Please upload and process sources first.',
-            StatusCodes.BAD_REQUEST,
-          );
-        }
+    if (!content || content.trim().length === 0) {
+      return errorResponse(
+        'No source content available. Please upload and process sources first.',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
-        const truncatedContent = truncateContent(content);
-        const prompt = createQuizPrompt(
-          truncatedContent,
-          count,
-          question_types,
-          topics?.join(', '),
-        );
+    const truncatedContent = truncateContent(content);
+    const prompt = createQuizPrompt(truncatedContent, count, question_types, topics?.join(', '));
 
-        const { RAG_CONFIG } = await import('@/shared/lib/rag/config');
-        const response = await getChatCompletion([{ role: 'user', content: prompt }], {
-          temperature: RAG_CONFIG.AI.DEFAULT_TEMPERATURE,
-          maxTokens: RAG_CONFIG.AI.MAX_TOKENS,
-          mockType: 'quiz',
-        });
+    const { consumeAiQueryQuota } = await import('@/shared/lib/paystack/db');
+    const aiQuota = await consumeAiQueryQuota(userId);
+    if (!aiQuota.allowed) {
+      return errorResponse(
+        'You have reached your daily AI query limit. Upgrade your plan for a higher limit.',
+        StatusCodes.FORBIDDEN,
+        { upgradeRequired: aiQuota.limit <= 5 },
+      );
+    }
 
-        let generatedQuestions: QuizQuestionFormat[] = [];
+    const { RAG_CONFIG } = await import('@/shared/lib/rag/config');
+    const response = await getChatCompletion([{ role: 'user', content: prompt }], {
+      temperature: RAG_CONFIG.AI.DEFAULT_TEMPERATURE,
+      maxTokens: RAG_CONFIG.AI.MAX_TOKENS,
+      mockType: 'quiz',
+      responseMimeType: 'application/json',
+      responseSchema: QUIZ_RESPONSE_SCHEMA,
+    });
 
-        try {
-          const jsonMatch = response.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            generatedQuestions = JSON.parse(jsonMatch[0]);
-          }
-        } catch (parseError) {
-          console.error('Failed to parse quiz response:', parseError);
-          return errorResponse(
-            'Failed to parse generated quiz questions',
-            StatusCodes.INTERNAL_ERROR,
-          );
-        }
+    let generatedQuestions: QuizQuestionFormat[] = [];
 
-        if (!generatedQuestions || generatedQuestions.length === 0) {
-          return errorResponse('No quiz questions were generated', StatusCodes.INTERNAL_ERROR);
-        }
+    try {
+      generatedQuestions = JSON.parse(response) as QuizQuestionFormat[];
+    } catch (parseError) {
+      console.error('Failed to parse quiz response:', parseError);
+      return errorResponse('Failed to parse generated quiz questions', StatusCodes.INTERNAL_ERROR);
+    }
 
-        const quizId = crypto.randomUUID();
-        const questions = [];
+    if (!generatedQuestions || generatedQuestions.length === 0) {
+      return errorResponse('No quiz questions were generated', StatusCodes.INTERNAL_ERROR);
+    }
 
-        for (const generated of generatedQuestions) {
-          const questionId = crypto.randomUUID();
-
-          let options: Record<string, string> | undefined;
-          if (generated.type === 'multiple_choice' && generated.options) {
-            options = {
+    const quizId = crypto.randomUUID();
+    const questions = generatedQuestions.map((generated) => {
+      const questionId = crypto.randomUUID();
+      const options =
+        generated.type === 'multiple_choice' && generated.options
+          ? {
               A: generated.options[0],
               B: generated.options[1],
               C: generated.options[2],
               D: generated.options[3],
-            };
-          }
+            }
+          : undefined;
 
-          questions.push({
-            question_id: questionId,
-            question_text: generated.question,
-            question_type: generated.type,
-            options,
-            correct_answer: generated.correct_answer,
-            explanation: generated.explanation,
-            difficulty: 'medium' as const,
-          });
-        }
+      return {
+        question_id: questionId,
+        question_text: generated.question,
+        question_type: generated.type,
+        options,
+        correct_answer: generated.correct_answer,
+        explanation: generated.explanation,
+        difficulty: 'medium' as const,
+      };
+    });
 
-        const quizData = {
+    const quizRef = await db.collection('quizzes').add({
+      quiz_id: quizId,
+      workspace_id: workspaceId,
+      user_id: userId,
+      source_id: source_ids?.[0] || null,
+      title: topics?.[0] || 'Untitled Quiz',
+      topic: topics?.[0] || null,
+      questions,
+      total_questions: questions.length,
+      completed: false,
+      created_at: Timestamp.now(),
+    });
+
+    return successResponse(
+      {
+        quiz: {
           quiz_id: quizId,
-          workspace_id: workspaceId,
-          user_id: userId,
-          source_id: source_ids?.[0] || null,
-          questions,
+          id: quizRef.id,
           total_questions: questions.length,
-          completed: false,
-          created_at: require('firebase-admin/firestore').Timestamp.now(),
-        };
-
-        const quizRef = await db.collection('quizzes').add(quizData);
-
-        const responseQuestions = questions.map((q) => ({
-          question_id: q.question_id,
-          question_text: q.question_text,
-          question_type: q.question_type,
-          options: q.options,
-          difficulty: q.difficulty,
-        }));
-
-        // Increment AI query count
-        const { incrementAiQueryCount } = await import('@/shared/lib/paystack/db');
-        await incrementAiQueryCount(userId);
-
-        return successResponse(
-          {
-            quiz: {
-              quiz_id: quizId,
-              id: quizRef.id,
-              total_questions: questions.length,
-              questions: responseQuestions,
-            },
-            generated_count: questions.length,
-          },
-          StatusCodes.CREATED,
-        );
-      } catch (error: unknown) {
-        console.error('Error in quiz generation:', error);
-        return errorResponse('Failed to generate quiz', StatusCodes.INTERNAL_ERROR);
-      }
-    },
-    async (req, ctx) => {
-      const workspaceId = req.url.split('/workspaces/')[1]?.split('/')[0];
-      if (!workspaceId) return null;
-      const doc = await ctx.db.collection('workspaces').doc(workspaceId).get();
-      if (!doc.exists) return null;
-      return { id: doc.id, ...doc.data() };
-    },
-    (workspace: any) => workspace.user_id,
-  )(request, context);
+          questions: questions.map((q) => ({
+            question_id: q.question_id,
+            question_text: q.question_text,
+            question_type: q.question_type,
+            options: q.options,
+            difficulty: q.difficulty,
+          })),
+        },
+        generated_count: questions.length,
+      },
+      StatusCodes.CREATED,
+    );
+  } catch (error: unknown) {
+    console.error('Error in quiz generation:', error);
+    return errorResponse('Failed to generate quiz', StatusCodes.INTERNAL_ERROR);
+  }
 });

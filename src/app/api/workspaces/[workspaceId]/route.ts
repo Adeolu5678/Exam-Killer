@@ -1,22 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { Firestore } from 'firebase-admin/firestore';
+import { z } from 'zod';
 
 import {
   withAuth,
-  parseBody,
+  parseBodyWithZod,
   errorResponse,
   successResponse,
   StatusCodes,
 } from '@/shared/lib/api/auth';
 import {
-  UpdateWorkspaceRequest,
   WorkspaceDetail,
   WorkspaceDetailResponse,
   UpdateWorkspaceResponse,
   DeleteWorkspaceResponse,
 } from '@/shared/types/api';
 import { TutorPersonality } from '@/shared/types/database';
+
+const VALID_TUTOR_PERSONALITIES = [
+  'mentor',
+  'drill',
+  'peer',
+  'professor',
+  'storyteller',
+  'coach',
+] as const;
+
+const UpdateWorkspaceRequestSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  course_code: z.string().nullable().optional(),
+  university: z.string().nullable().optional(),
+  tutor_personality: z.enum(VALID_TUTOR_PERSONALITIES).optional(),
+  tutor_custom_instructions: z.string().nullable().optional(),
+  is_public: z.boolean().optional(),
+});
 
 /**
  * Helper to extract workspaceId from URL
@@ -39,6 +58,7 @@ async function getWorkspaceWithAccess(
   workspace: FirebaseFirestore.DocumentSnapshot;
   data: FirebaseFirestore.DocumentData;
   isOwner: boolean;
+  userRole: 'owner' | 'admin' | 'member';
 } | null> {
   const workspaceDoc = await db.collection('workspaces').doc(workspaceId).get();
 
@@ -53,12 +73,27 @@ async function getWorkspaceWithAccess(
 
   const isOwner = workspaceData.user_id === userId;
 
-  // Check access: owner or public workspace
-  if (!isOwner && !workspaceData.is_public) {
+  const memberCheckSnapshot = await db
+    .collection('workspace_members')
+    .where('workspace_id', '==', workspaceId)
+    .where('user_id', '==', userId)
+    .limit(1)
+    .get();
+
+  const isMember = !memberCheckSnapshot.empty;
+  const memberRole = (memberCheckSnapshot.docs[0]?.data()?.role || 'member') as 'admin' | 'member';
+
+  // Check access: owner, member, or public workspace
+  if (!isOwner && !isMember && !workspaceData.is_public) {
     return null;
   }
 
-  return { workspace: workspaceDoc, data: workspaceData, isOwner };
+  return {
+    workspace: workspaceDoc,
+    data: workspaceData,
+    isOwner,
+    userRole: isOwner ? 'owner' : isMember ? memberRole : 'member',
+  };
 }
 
 /**
@@ -101,7 +136,7 @@ export const GET = withAuth(async (request: NextRequest, { db, userId }) => {
       return errorResponse('Workspace not found or access denied', StatusCodes.NOT_FOUND);
     }
 
-    const { workspace: workspaceDoc, data: workspaceData, isOwner } = result;
+    const { workspace: workspaceDoc, data: workspaceData, userRole } = result;
 
     const ownerDoc = await db.collection('users').doc(workspaceData.user_id).get();
     const ownerData = ownerDoc.exists ? ownerDoc.data() : null;
@@ -155,7 +190,7 @@ export const GET = withAuth(async (request: NextRequest, { db, userId }) => {
         name: ownerData?.full_name || '',
         email: ownerData?.email || '',
       },
-      user_role: isOwner ? 'owner' : null,
+      user_role: userRole,
       sources,
       flashcard_stats: flashcardStats,
       recent_sessions: [],
@@ -190,11 +225,9 @@ export const PUT = withAuth(async (request: NextRequest, { db, userId }) => {
       return errorResponse('Workspace not found or access denied', StatusCodes.FORBIDDEN);
     }
 
-    const body = await parseBody<UpdateWorkspaceRequest>(request);
-
-    if (!body) {
-      return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
-    }
+    const { data: body, error } = await parseBodyWithZod(request, UpdateWorkspaceRequestSchema);
+    if (error) return error;
+    if (!body) return errorResponse('Invalid request body', StatusCodes.BAD_REQUEST);
 
     const {
       name,
@@ -216,7 +249,7 @@ export const PUT = withAuth(async (request: NextRequest, { db, userId }) => {
     }
 
     if (description !== undefined) {
-      updateData.description = description.trim();
+      updateData.description = description?.trim() || '';
     }
 
     if (course_code !== undefined) {
@@ -228,17 +261,6 @@ export const PUT = withAuth(async (request: NextRequest, { db, userId }) => {
     }
 
     if (tutor_personality !== undefined) {
-      const validPersonality: TutorPersonality[] = [
-        'mentor',
-        'drill',
-        'peer',
-        'professor',
-        'storyteller',
-        'coach',
-      ];
-      if (!validPersonality.includes(tutor_personality)) {
-        return errorResponse('Invalid tutor personality', StatusCodes.BAD_REQUEST);
-      }
       updateData.tutor_personality = tutor_personality;
     }
 

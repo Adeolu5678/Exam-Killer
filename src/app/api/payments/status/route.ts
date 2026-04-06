@@ -14,6 +14,12 @@ interface StatusResponse {
     currentPeriodEnd?: string;
     isTrial?: boolean;
     hasHadTrial?: boolean;
+    paystackAuthorizationCode?: string;
+    matricNumber?: string;
+    institution?: string;
+    verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+    verificationMediaUrl?: string;
+    verificationSubmittedAt?: string;
   };
   usage?: {
     workspacesCount: number;
@@ -58,6 +64,12 @@ export const GET = withAuth(async (request: NextRequest, { userId }) => {
         currentPeriodEnd: subscription?.currentPeriodEnd?.toISOString(),
         isTrial: subscription?.isTrial,
         hasHadTrial: subscription?.hasHadTrial,
+        paystackAuthorizationCode: subscription?.paystackAuthorizationCode,
+        matricNumber: subscription?.matricNumber,
+        institution: subscription?.institution,
+        verificationStatus: subscription?.verificationStatus,
+        verificationMediaUrl: subscription?.verificationMediaUrl,
+        verificationSubmittedAt: subscription?.verificationSubmittedAt?.toISOString(),
       },
       usage: mapUsageStats(usage),
       limits: {

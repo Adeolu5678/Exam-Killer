@@ -20,8 +20,9 @@ import {
   ListChecks,
   MessageSquare,
   BarChart3,
+  CalendarDays,
+  Users,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react';
 
 import { Skeleton } from '@/shared/ui';
@@ -44,7 +45,7 @@ const SUB_NAV_LINKS: SubNavLink[] = [
     key: 'sources',
     label: 'Sources',
     icon: FileText,
-    href: (id) => `/dashboard/workspace/${id}`,
+    href: (id) => `/dashboard/workspace/${id}/sources`,
   },
   {
     key: 'flashcards',
@@ -65,16 +66,22 @@ const SUB_NAV_LINKS: SubNavLink[] = [
     href: (id) => `/dashboard/workspace/${id}/chat`,
   },
   {
+    key: 'study-plan',
+    label: 'Study Plan',
+    icon: CalendarDays,
+    href: (id) => `/dashboard/workspace/${id}/study-plan`,
+  },
+  {
     key: 'analytics',
     label: 'Analytics',
     icon: BarChart3,
     href: (id) => `/dashboard/workspace/${id}/analytics`,
   },
   {
-    key: 'studio',
-    label: 'Studio',
-    icon: Sparkles,
-    href: (id) => `/dashboard/workspace/${id}/studio`,
+    key: 'members',
+    label: 'Members',
+    icon: Users,
+    href: (id) => `/dashboard/workspace/${id}/members`,
   },
 ];
 
@@ -91,7 +98,7 @@ function WorkspaceBreadcrumb({ workspaceName, isLoading }: BreadcrumbProps) {
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 px-6 pb-0 pt-5">
       <Link
-        href="/dashboard"
+        href="/dashboard/workspaces"
         className="rounded text-xs font-medium text-[var(--color-text-muted)] transition-colors duration-[var(--duration-fast)] hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-primary)]"
       >
         Workspaces
@@ -152,11 +159,12 @@ interface SubNavProps {
 function SubNavPillGroup({ workspaceId, pathname }: SubNavProps) {
   // Determine active tab by matching path segments
   const activeKey = useMemo(() => {
+    if (pathname.includes('/study-plan')) return 'study-plan';
     if (pathname.endsWith('/flashcards')) return 'flashcards';
     if (pathname.includes('/quiz')) return 'quizzes';
     if (pathname.includes('/chat')) return 'tutor';
     if (pathname.includes('/analytics')) return 'analytics';
-    if (pathname.includes('/studio')) return 'studio';
+    if (pathname.includes('/members')) return 'members';
     return 'sources';
   }, [pathname]);
 

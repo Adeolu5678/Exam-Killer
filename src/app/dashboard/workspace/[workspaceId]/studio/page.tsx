@@ -1,12 +1,9 @@
-import dynamic from 'next/dynamic';
+import { redirect } from 'next/navigation';
 
-import { StudioSkeleton } from '@/features/studio';
+interface WorkspaceStudioPageProps {
+  params: { workspaceId: string };
+}
 
-const StudioPageShell = dynamic(() => import('@/features/studio').then((m) => m.StudioPageShell), {
-  ssr: false,
-  loading: () => <StudioSkeleton />,
-});
-
-export default function StudioPage({ params }: { params: { workspaceId: string } }) {
-  return <StudioPageShell workspaceId={params.workspaceId} />;
+export default function WorkspaceStudioPage({ params }: WorkspaceStudioPageProps) {
+  redirect(`/dashboard/workspace/${params.workspaceId}/sources`);
 }

@@ -130,12 +130,22 @@ export function uploadSource(
           reject(new Error('Failed to parse upload response'));
         }
       } else {
+        let errorMessage = 'Upload failed';
         try {
           const error = JSON.parse(xhr.responseText) as { error?: string };
-          reject(new Error(error.error ?? 'Upload failed'));
+          errorMessage = error.error ?? 'Upload failed';
         } catch {
-          reject(new Error('Upload failed'));
+          // ignore json parse error
         }
+
+        const friendlyMessage =
+          xhr.status === 413
+            ? 'File is too large (max 50 MB)'
+            : xhr.status === 415
+              ? 'File type not supported'
+              : errorMessage;
+
+        reject(new Error(friendlyMessage));
       }
     });
 
@@ -165,42 +175,6 @@ export async function deleteSource(sourceId: string): Promise<void> {
 export async function processSource(sourceId: string): Promise<ProcessSourceResponse> {
   return apiFetch<ProcessSourceResponse>(`/api/sources/${sourceId}/process`, {
     method: 'POST',
-    credentials: 'include' as RequestCredentials,
-  });
-}
-
-/**
- * Fetches the NLM notebook associated with a workspace.
- */
-export async function getNlmNotebook(
-  workspaceId: string,
-): Promise<{ notebook_id: string; profile_name: string } | null> {
-  try {
-    return apiFetch<{ notebook_id: string; profile_name: string }>(
-      `/api/notebooklm/notebooks?workspaceId=${workspaceId}`,
-      { method: 'GET', credentials: 'include' as RequestCredentials },
-    );
-  } catch (err: any) {
-    if (err.status === 404) return null;
-    throw err;
-  }
-}
-
-/**
- * Pushes a source URL to an NLM notebook.
- */
-export async function addSourceToNlm(
-  notebookId: string,
-  workspaceId: string,
-  sourceUrl: string,
-): Promise<{ success: boolean }> {
-  return apiFetch<{ success: boolean }>(`/api/notebooklm/notebooks/${notebookId}/sources`, {
-    method: 'POST',
-    body: JSON.stringify({
-      workspaceId,
-      sourceType: 'url',
-      value: sourceUrl,
-    }),
     credentials: 'include' as RequestCredentials,
   });
 }

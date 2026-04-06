@@ -12,14 +12,7 @@ import { toast } from 'sonner';
 
 import { useSourcesStore } from './sourcesStore';
 import type { SourceItem, UploadProgress } from './types';
-import {
-  fetchSources,
-  uploadSource,
-  deleteSource,
-  processSource,
-  getNlmNotebook,
-  addSourceToNlm,
-} from '../api/sourcesApi';
+import { fetchSources, uploadSource, deleteSource, processSource } from '../api/sourcesApi';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -44,10 +37,13 @@ export function useSources(workspaceId: string) {
     staleTime: 1000 * 60, // 1 min
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
-      const data = query.state.data as { sources: SourceItem[] } | undefined;
-      const hasProcessing = data?.sources?.some(
-        (s) => s.embedding_status === 'processing' || s.embedding_status === 'pending',
-      );
+      const data = query.state.data;
+      const hasProcessing =
+        Array.isArray(data) &&
+        data.some(
+          (source) =>
+            source.embedding_status === 'processing' || source.embedding_status === 'pending',
+        );
       return hasProcessing ? 3000 : false;
     },
   });
@@ -59,22 +55,11 @@ export function useSources(workspaceId: string) {
 
 export function useUploadSource(workspaceId: string) {
   const queryClient = useQueryClient();
-  const { enqueueFiles, startUpload, updateProgress, completeUpload, failUpload } =
-    useSourcesStore();
+  const { startUpload, updateProgress, completeUpload, failUpload } = useSourcesStore();
 
   const mutation = useMutation({
-    mutationFn: async (file: File) => {
-      const queueId = nanoid();
-
-      // 1. Enqueue entry in local store for progress UI
-      enqueueFiles([
-        {
-          id: queueId,
-          file,
-          status: 'pending',
-          progress: { loaded: 0, total: file.size, percent: 0 },
-        },
-      ]);
+    mutationFn: async ({ file, id }: { file: File; id?: string }) => {
+      const queueId = id ?? nanoid();
       startUpload(queueId);
 
       const onProgress = (p: UploadProgress) => updateProgress(queueId, p);
@@ -90,23 +75,10 @@ export function useUploadSource(workspaceId: string) {
       }
     },
 
-    onSuccess: (data: SourceItem) => {
+    onSuccess: (_data: SourceItem) => {
       // Invalidate the list so new source appears immediately
       void queryClient.invalidateQueries({ queryKey: sourceKeys.list(workspaceId) });
       toast.success('Source uploaded successfully');
-
-      // Secondary action: Push to NLM in background
-      if (data.file_url) {
-        getNlmNotebook(workspaceId)
-          .then((notebook) => {
-            if (notebook) {
-              return addSourceToNlm(notebook.notebook_id, workspaceId, data.file_url);
-            }
-          })
-          .catch((err) => {
-            console.error('Failed to push source to NLM:', err);
-          });
-      }
     },
   });
 

@@ -7,7 +7,7 @@
 // Blueprint §2.6: "Hero section: Time-sensitive greeting + today's review queue"
 // =============================================================================
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 
 import type { User } from 'firebase/auth';
 import { motion } from 'framer-motion';
@@ -126,12 +126,6 @@ interface HeroSectionProps {
 }
 
 export function HeroSection({ user, streak = 0, dueCards = 0, onStartReview }: HeroSectionProps) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(t);
-  }, []);
-
   const { salutation, emoji } = useMemo(() => getTimeGreeting(), []);
 
   const displayName = user?.displayName ?? user?.email?.split('@')[0] ?? 'there';
@@ -155,18 +149,16 @@ export function HeroSection({ user, streak = 0, dueCards = 0, onStartReview }: H
             className="text-2xl font-bold leading-tight tracking-tight text-[var(--color-text-primary)] sm:text-3xl"
           >
             <span aria-hidden="true" className="mr-2">
-              {mounted ? emoji : '✨'}
+              {emoji}
             </span>
-            {mounted ? salutation : 'Welcome back'}, {firstName_}
+            {salutation}, {firstName_}
           </h1>
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-            {mounted
-              ? new Date().toLocaleDateString('en-NG', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                })
-              : 'Loading your dashboard...'}
+            {new Date().toLocaleDateString('en-NG', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+            })}
           </p>
         </div>
 

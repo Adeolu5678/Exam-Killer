@@ -7,7 +7,7 @@
 
 import { useRouter } from 'next/navigation';
 
-import { LayoutDashboard, Settings, BookOpen, Plus, Bot, Users } from 'lucide-react';
+import { LayoutDashboard, Settings, BookOpen, Plus, Bot, CalendarDays } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // Re-exported workspace list from the workspace feature public API
@@ -104,10 +104,9 @@ export function useCommandPaletteCommands({
       {
         id: 'action-open-tutor',
         label: 'Open AI Tutor',
-        description: 'Start a chat session in the current workspace',
+        description: 'Open the tutor for your most recent workspace',
         icon: Bot,
         onSelect: () => {
-          // Navigate to the first workspace's tutor if available
           if (workspaces[0]) {
             go(`/dashboard/workspace/${workspaces[0].id}/chat`);
           } else {
@@ -116,11 +115,11 @@ export function useCommandPaletteCommands({
         },
       },
       {
-        id: 'action-invite',
-        label: 'Invite Members',
-        description: 'Collaborate with classmates',
-        icon: Users,
-        onSelect: () => go('/dashboard/settings'),
+        id: 'action-study-plan',
+        label: 'Open Study Plans',
+        description: 'Review upcoming exams and sessions',
+        icon: CalendarDays,
+        onSelect: () => go('/dashboard/study-plan'),
       },
     ],
   };

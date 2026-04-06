@@ -11,11 +11,10 @@ import type { FlashcardItem } from './types';
 import {
   fetchFlashcards,
   createFlashcard,
+  generateFlashcards,
   updateFlashcard,
   deleteFlashcard,
   submitFlashcardReview,
-  generateNlmFlashcards,
-  getNlmNotebook,
 } from '../api/flashcardsApi';
 
 // ── Query key factory ─────────────────────────────────────────────────────────
@@ -30,9 +29,35 @@ export function useFlashcards(workspaceId: string) {
   return useQuery({
     queryKey: flashcardKeys.list(workspaceId),
     queryFn: () => fetchFlashcards(workspaceId),
-    enabled: !!workspaceId,
+    enabled: Boolean(workspaceId),
     staleTime: 30_000,
     select: (data) => data.flashcards,
+  });
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+export function useGenerateFlashcards(workspaceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { source_ids?: string[]; topic?: string; count?: number }) =>
+      generateFlashcards(workspaceId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
+      toast.success('Flashcards generated successfully!');
+    },
+    onError: (err: any) => {
+      if (err.upgradeRequired || err.message?.includes('Upgrade')) {
+        toast.error('Limit exceeded', {
+          description: 'Upgrade to Premium for unlimited AI flashcard generation.',
+          action: {
+            label: 'Upgrade',
+            onClick: () => (window.location.href = '/pricing'),
+          },
+        });
+      } else {
+        toast.error(err.message || 'Failed to generate flashcards');
+      }
+    },
   });
 }
 
@@ -62,24 +87,17 @@ export function useUpdateFlashcard(workspaceId: string) {
     onMutate: async ({ flashcardId, data }) => {
       // Optimistic update
       await queryClient.cancelQueries({ queryKey: flashcardKeys.list(workspaceId) });
-      const prev = queryClient.getQueryData<{ flashcards: FlashcardItem[] }>(
-        flashcardKeys.list(workspaceId),
-      );
-      queryClient.setQueryData<{ flashcards: FlashcardItem[] }>(
-        flashcardKeys.list(workspaceId),
-        (old) => {
-          if (!old) return old;
-          return {
-            flashcards: old.flashcards.map((c) => (c.id === flashcardId ? { ...c, ...data } : c)),
-          };
-        },
+      const prev = queryClient.getQueryData<FlashcardItem[]>(flashcardKeys.list(workspaceId));
+      queryClient.setQueryData<FlashcardItem[]>(flashcardKeys.list(workspaceId), (old) =>
+        old?.map((card) => (card.id === flashcardId ? { ...card, ...data } : card)),
       );
       return { prev };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.prev) {
         queryClient.setQueryData(flashcardKeys.list(workspaceId), ctx.prev);
       }
+      toast.error(err instanceof Error ? err.message : 'Failed to update flashcard');
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
@@ -94,19 +112,17 @@ export function useDeleteFlashcard(workspaceId: string) {
     mutationFn: (flashcardId: string) => deleteFlashcard(flashcardId),
     onMutate: async (flashcardId) => {
       await queryClient.cancelQueries({ queryKey: flashcardKeys.list(workspaceId) });
-      const prev = queryClient.getQueryData<{ flashcards: FlashcardItem[] }>(
-        flashcardKeys.list(workspaceId),
-      );
-      queryClient.setQueryData<{ flashcards: FlashcardItem[] }>(
-        flashcardKeys.list(workspaceId),
-        (old) => (old ? { flashcards: old.flashcards.filter((c) => c.id !== flashcardId) } : old),
+      const prev = queryClient.getQueryData<FlashcardItem[]>(flashcardKeys.list(workspaceId));
+      queryClient.setQueryData<FlashcardItem[]>(flashcardKeys.list(workspaceId), (old) =>
+        old?.filter((card) => card.id !== flashcardId),
       );
       return { prev };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.prev) {
         queryClient.setQueryData(flashcardKeys.list(workspaceId), ctx.prev);
       }
+      toast.error(err instanceof Error ? err.message : 'Failed to delete flashcard');
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
@@ -122,25 +138,6 @@ export function useReviewFlashcard(workspaceId: string) {
       submitFlashcardReview(flashcardId, quality),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
-    },
-  });
-}
-
-// ── Generate via NLM ─────────────────────────────────────────────────────────
-export function useGenerateNlmFlashcards(workspaceId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const notebook = await getNlmNotebook(workspaceId);
-      if (!notebook) throw new Error('No linked NotebookLM notebook found for this workspace.');
-      return generateNlmFlashcards(notebook.notebook_id, workspaceId);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
-      toast.success('Flashcards generated via NLM!');
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'NLM Generation failed');
     },
   });
 }

@@ -13,9 +13,11 @@
 
 import { useRef, useMemo } from 'react';
 
+import Link from 'next/link';
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { motion } from 'framer-motion';
-import { Play, Plus, Clock, Flame, BookOpen, CheckCircle2, Layers } from 'lucide-react';
+import { Play, Plus, Clock, Flame, BookOpen, CheckCircle2, Layers, Zap } from 'lucide-react';
 
 import { Card, CardHeader, CardTitle, CardContent, Badge, Skeleton } from '@/shared/ui';
 
@@ -34,6 +36,11 @@ interface FlashCardDeckProps {
   error?: string | null;
   streak?: number;
   onAddCard?: () => void;
+  onGenerate?: () => void;
+  isGenerating?: boolean;
+  reviewHref?: string;
+  hideCreationActions?: boolean;
+  reviewLabel?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -43,6 +50,11 @@ export function FlashCardDeck({
   error = null,
   streak = 0,
   onAddCard,
+  onGenerate,
+  isGenerating = false,
+  reviewHref,
+  hideCreationActions = false,
+  reviewLabel,
 }: FlashCardDeckProps) {
   const { openReview, openCreator } = useFlashcardsStore();
   const stats = useMemo(() => computeDeckStats(cards), [cards]);
@@ -79,7 +91,10 @@ export function FlashCardDeck({
       </div>
     );
 
-  if (cards.length === 0) return <EmptyDeck onAddCard={handleAddCard} />;
+  if (cards.length === 0)
+    return (
+      <EmptyDeck onAddCard={handleAddCard} onGenerate={onGenerate} isGenerating={isGenerating} />
+    );
 
   return (
     <div className={styles.root}>
@@ -109,17 +124,47 @@ export function FlashCardDeck({
 
         {/* Action buttons */}
         <div className={styles.actions}>
-          <button className={styles.addBtn} onClick={handleAddCard} aria-label="Add flashcard">
-            <Plus size={16} />
-          </button>
-          <button
-            className={styles.reviewBtn}
-            onClick={handleStartReview}
-            disabled={dueCards.length === 0 && cards.length === 0}
-          >
-            <Play size={15} />
-            {dueCards.length > 0 ? `Review ${dueCards.length} due` : 'Review all'}
-          </button>
+          {!hideCreationActions && (
+            <>
+              <button
+                className={styles.addBtn}
+                onClick={onGenerate}
+                disabled={isGenerating}
+                aria-label="Generate flashcards with AI"
+                title="Generate with AI"
+              >
+                {isGenerating ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1 }}
+                  >
+                    <Layers size={16} />
+                  </motion.div>
+                ) : (
+                  <Zap size={16} />
+                )}
+              </button>
+              <button className={styles.addBtn} onClick={handleAddCard} aria-label="Add flashcard">
+                <Plus size={16} />
+              </button>
+            </>
+          )}
+          {reviewHref ? (
+            <Link href={reviewHref} className={styles.reviewBtn}>
+              <Play size={15} />
+              {reviewLabel ?? (dueCards.length > 0 ? `Review ${dueCards.length} due` : 'Open deck')}
+            </Link>
+          ) : (
+            <button
+              className={styles.reviewBtn}
+              onClick={handleStartReview}
+              disabled={dueCards.length === 0 && cards.length === 0}
+            >
+              <Play size={15} />
+              {reviewLabel ??
+                (dueCards.length > 0 ? `Review ${dueCards.length} due` : 'Review all')}
+            </button>
+          )}
         </div>
       </motion.div>
 
@@ -336,7 +381,15 @@ function MasteryDot({ tier, label }: { tier: MasteryTier; label: string }) {
 }
 
 // ── Empty state ────────────────────────────────────────────────────────────────
-function EmptyDeck({ onAddCard }: { onAddCard: () => void }) {
+function EmptyDeck({
+  onAddCard,
+  onGenerate,
+  isGenerating,
+}: {
+  onAddCard: () => void;
+  onGenerate?: () => void;
+  isGenerating: boolean;
+}) {
   return (
     <motion.div
       className={styles.emptyState}
@@ -352,10 +405,26 @@ function EmptyDeck({ onAddCard }: { onAddCard: () => void }) {
       <p className={styles.emptySub}>
         Generate cards from your study materials or create them manually.
       </p>
-      <button className={styles.reviewBtn} onClick={onAddCard}>
-        <Plus size={15} />
-        Create first card
-      </button>
+
+      <div className="flex flex-col items-center gap-3">
+        <button className={styles.reviewBtn} onClick={onGenerate} disabled={isGenerating}>
+          {isGenerating ? (
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+              <Layers size={15} />
+            </motion.div>
+          ) : (
+            <Zap size={15} />
+          )}
+          {isGenerating ? 'Generating...' : 'Generate with AI'}
+        </button>
+
+        <button
+          className="text-sm text-[var(--color-text-muted)] hover:underline"
+          onClick={onAddCard}
+        >
+          + Create manually
+        </button>
+      </div>
     </motion.div>
   );
 }

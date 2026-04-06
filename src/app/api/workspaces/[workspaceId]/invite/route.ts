@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+
+import { Timestamp } from 'firebase-admin/firestore';
 
 import {
   withAuth,
@@ -31,6 +33,17 @@ function extractWorkspaceId(request: NextRequest): string {
 }
 
 export const POST = withAuth(async (request, { db, userId }) => {
+  const { getUserSubscription } = await import('@/shared/lib/paystack/db');
+  const { canAccessFeature } = await import('@/shared/lib/paystack/subscription');
+  const subscription = await getUserSubscription(userId);
+  if (!canAccessFeature(subscription, 'collaboration')) {
+    return errorResponse(
+      'Workspace collaboration requires a Premium subscription.',
+      StatusCodes.FORBIDDEN,
+      { upgradeRequired: true },
+    );
+  }
+
   const workspaceId = extractWorkspaceId(request);
 
   if (!workspaceId) {
@@ -51,9 +64,9 @@ export const POST = withAuth(async (request, { db, userId }) => {
 
   // Owner only
   if (workspaceData.user_id !== userId) {
-    return NextResponse.json(
-      { error: 'Access denied. Only the workspace owner can create invites.' },
-      { status: StatusCodes.FORBIDDEN },
+    return errorResponse(
+      'Access denied. Only the workspace owner can create invites.',
+      StatusCodes.FORBIDDEN,
     );
   }
 
@@ -74,8 +87,8 @@ export const POST = withAuth(async (request, { db, userId }) => {
     invite_code: inviteCode,
     role,
     created_by: userId,
-    created_at: require('firebase-admin/firestore').Timestamp.now(),
-    expires_at: require('firebase-admin/firestore').Timestamp.fromDate(expiresAt),
+    created_at: Timestamp.now(),
+    expires_at: Timestamp.fromDate(expiresAt),
     uses_count: 0,
   });
 

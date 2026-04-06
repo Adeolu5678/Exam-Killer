@@ -1,19 +1,8 @@
 export const PROTECTED_ROUTES = ['/dashboard', '/workspace', '/profile', '/settings'] as const;
 
-export const PUBLIC_ROUTES = [
-  '/',
-  '/auth/login',
-  '/auth/signup',
-  '/auth/forgot-password',
-  '/auth/reset-password',
-] as const;
+export const PUBLIC_ROUTES = ['/', '/auth/login', '/auth/signup'] as const;
 
-export const AUTH_ROUTES = [
-  '/auth/login',
-  '/auth/signup',
-  '/auth/forgot-password',
-  '/auth/reset-password',
-] as const;
+export const AUTH_ROUTES = ['/auth/login', '/auth/signup'] as const;
 
 export const LOGIN_ROUTE = '/auth/login';
 export const DASHBOARD_ROUTE = '/dashboard';

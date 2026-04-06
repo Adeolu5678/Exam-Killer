@@ -11,6 +11,15 @@ interface ExportRequest {
 }
 
 export const POST = withAuth(async (request: NextRequest, { db, userId }) => {
+  const { getUserSubscription } = await import('@/shared/lib/paystack/db');
+  const { canAccessFeature } = await import('@/shared/lib/paystack/subscription');
+  const subscription = await getUserSubscription(userId);
+  if (!canAccessFeature(subscription, 'exportPdf')) {
+    return errorResponse('PDF export requires a Premium subscription.', StatusCodes.FORBIDDEN, {
+      upgradeRequired: true,
+    });
+  }
+
   const body = await parseBody<ExportRequest>(request);
 
   if (!body) {

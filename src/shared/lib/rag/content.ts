@@ -27,7 +27,12 @@ export async function fetchRAGContent(
         .orderBy('source_id')
         .orderBy('index') // Assuming 'index' exists for ordering, or just get all
         .get();
-      return snapshot.docs.map((doc) => doc.data().content as string);
+      return snapshot.docs
+        .map((doc) => {
+          const data = doc.data();
+          return typeof data.content === 'string' ? data.content : '';
+        })
+        .filter((content) => content.length > 0);
     });
 
     const results = await Promise.all(chunkPromises);
@@ -42,7 +47,12 @@ export async function fetchRAGContent(
       .limit(100) // Safety limit for workspace-wide fetch
       .get();
 
-    chunks = allChunksSnapshot.docs.map((doc) => doc.data().content as string);
+    chunks = allChunksSnapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        return typeof data.content === 'string' ? data.content : '';
+      })
+      .filter((content) => content.length > 0);
   }
 
   return chunks.join('\n\n');

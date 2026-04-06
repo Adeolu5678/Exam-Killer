@@ -121,5 +121,13 @@ service cloud.firestore {
       );
       // AI systems write via admin SDK (server-side), so no client write rules needed
     }
+    // Deprecated NotebookLM collections - locked down
+    match /notebooklm_accounts/{accountId} {
+      allow read, write: if false;
+    }
+    
+    match /user_notebooks/{notebookId} {
+      allow read, write: if false;
+    }
   }
 }

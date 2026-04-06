@@ -15,6 +15,27 @@ interface UseAuthReturn {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  subscription: {
+    plan: 'free' | 'premium_monthly' | 'premium_annual';
+    status: 'active' | 'inactive' | 'past_due';
+    currentPeriodEnd?: Date | string;
+    isTrial?: boolean;
+    hasHadTrial?: boolean;
+    paystackAuthorizationCode?: string;
+    matricNumber?: string;
+    institution?: string;
+    verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+    verificationMediaUrl?: string;
+    verificationSubmittedAt?: Date;
+  } | null;
+  usage: {
+    workspacesCount: number;
+    fileUploadsThisMonth: number;
+    aiQueriesToday: number;
+    flashcardsCount: number;
+  } | null;
+  canUseFeature: (feature: string) => boolean;
+  isLoadingSubscription: boolean;
   isAuthenticated: boolean;
 }
 

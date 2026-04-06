@@ -46,4 +46,6 @@ export {
   deleteWorkspace,
   fetchWorkspaceMembers,
   inviteMember,
+  updateWorkspaceMemberRole,
+  removeWorkspaceMember,
 } from './api/workspaceApi';

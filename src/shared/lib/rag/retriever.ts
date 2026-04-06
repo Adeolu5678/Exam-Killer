@@ -1,4 +1,8 @@
-import { getEmbedding } from '@/shared/lib/openai/client';
+import { getEmbedding, getChatCompletion } from '@/shared/lib/openai/client';
+import {
+  createRerankScoringPrompt,
+  RERANK_SCORES_RESPONSE_SCHEMA,
+} from '@/shared/lib/openai/prompts';
 import { queryVectors } from '@/shared/lib/rag/vector-store';
 
 export interface RetrievalOptions {
@@ -229,28 +233,25 @@ export async function rerankResults(
   }
 
   try {
-    const { openai } = await import('@/shared/lib/openai/client');
+    const scoringPrompt = createRerankScoringPrompt(query, chunks);
 
-    const scoringPrompt = `Rate the relevance of each chunk to the following query on a scale of 0-10.
-Query: "${query}"
-
-Chunks:
-${chunks.map((chunk, i) => `${i + 1}. ${chunk.content.slice(0, 500)}`).join('\n\n')}
-
-Respond with only a JSON array of scores in order, like: [8, 5, 9, 3, ...]`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: scoringPrompt }],
+    const scoringResponse = await getChatCompletion([{ role: 'user', content: scoringPrompt }], {
       temperature: 0,
+      maxTokens: 512,
+      responseMimeType: 'application/json',
+      responseSchema: RERANK_SCORES_RESPONSE_SCHEMA,
     });
 
-    const content = response.choices[0]?.message?.content;
-    const scores = JSON.parse(content || '[]');
+    const parsed = JSON.parse(scoringResponse || '[]') as unknown;
+    if (!Array.isArray(parsed)) {
+      throw new Error('Invalid rerank response format');
+    }
+    const scores = parsed.map((score) => (typeof score === 'number' ? score : NaN));
 
     const scoredChunks = chunks.map((chunk, i) => ({
       ...chunk,
-      rerankScore: typeof scores[i] === 'number' ? scores[i] / 10 : chunk.score,
+      rerankScore:
+        typeof scores[i] === 'number' ? Math.max(0, Math.min(scores[i], 10)) / 10 : chunk.score,
     }));
 
     scoredChunks.sort((a, b) => b.rerankScore - a.rerankScore);

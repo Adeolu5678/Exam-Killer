@@ -115,10 +115,11 @@ export function getStorageBucket(): string | null {
   return process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || null;
 }
 
-const app = requireAdminApp();
 const adminDb = {
-  db: app.db,
-  Timestamp: Timestamp,
+  get db() {
+    return requireAdminApp().db;
+  },
+  Timestamp,
 };
 
 export { adminDb };

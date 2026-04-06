@@ -15,11 +15,11 @@ export { FlashcardCreator } from './ui/FlashcardCreator';
 // ── TanStack Query hooks ───────────────────────────────────────────────────────
 export {
   useFlashcards,
+  useGenerateFlashcards,
   useCreateFlashcard,
   useUpdateFlashcard,
   useDeleteFlashcard,
   useReviewFlashcard,
-  useGenerateNlmFlashcards,
   flashcardKeys,
 } from './model/useFlashcards';
 
@@ -49,8 +49,6 @@ export {
   fetchFlashcards,
   fetchFlashcard,
   generateFlashcards,
-  generateNlmFlashcards,
-  getNlmNotebook,
   createFlashcard,
   updateFlashcard,
   deleteFlashcard,

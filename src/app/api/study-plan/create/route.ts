@@ -9,6 +9,7 @@ import {
 } from '@/shared/lib/api/auth';
 import { adminDb } from '@/shared/lib/firebase/admin';
 import { getChatCompletion } from '@/shared/lib/openai/client';
+import { createStudyPlanPrompt, STUDY_PLAN_RESPONSE_SCHEMA } from '@/shared/lib/openai/prompts';
 
 export const POST = withAuth(async (req: NextRequest, { userId, db }) => {
   const body = await parseBody<{
@@ -25,7 +26,13 @@ export const POST = withAuth(async (req: NextRequest, { userId, db }) => {
   const { workspace_id, exam_date, daily_study_hours, focus_topics } = body;
 
   const workspaceDoc = await db.collection('workspaces').doc(workspace_id).get();
+  if (!workspaceDoc.exists) {
+    return errorResponse('Workspace not found', StatusCodes.NOT_FOUND);
+  }
   const workspaceData = workspaceDoc.data();
+  if (!workspaceData || workspaceData.user_id !== userId) {
+    return errorResponse('Access denied', StatusCodes.FORBIDDEN);
+  }
 
   const sourcesSnapshot = await db
     .collection('sources')
@@ -40,40 +47,36 @@ export const POST = withAuth(async (req: NextRequest, { userId, db }) => {
   const today = new Date();
   const daysUntilExam = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  const prompt = `Generate a personalized study plan for exam preparation.
+  const prompt = createStudyPlanPrompt({
+    examDate: exam_date,
+    daysUntilExam,
+    dailyStudyHours: daily_study_hours,
+    focusTopics: focus_topics,
+    maxDays: Math.min(daysUntilExam, 30),
+  });
 
-USER INPUT:
-- Exam date: ${exam_date}
-- Days until exam: ${daysUntilExam}
-- Daily study hours: ${daily_study_hours}
-- Topics to cover: ${focus_topics?.join(', ') || 'All topics from workspace'}
-
-Generate a day-by-day schedule as JSON array (max ${Math.min(daysUntilExam, 30)} items):
-[
-  {
-    "date": "2026-03-01",
-    "topic": "Topic name",
-    "duration_minutes": ${daily_study_hours * 60},
-    "activity_type": "flashcard" | "quiz" | "practice" | "review" | "tutor",
-    "completed": false
+  const { consumeAiQueryQuota } = await import('@/shared/lib/paystack/db');
+  const aiQuota = await consumeAiQueryQuota(userId);
+  if (!aiQuota.allowed) {
+    return errorResponse(
+      'You have reached your daily AI query limit. Upgrade your plan for a higher limit.',
+      StatusCodes.FORBIDDEN,
+      { upgradeRequired: aiQuota.limit <= 5 },
+    );
   }
-]
-
-Guidelines:
-- Distribute topics across available days
-- Mix activity types for variety
-- Include review sessions before exam
-- Return ONLY valid JSON array, no other text`;
 
   const text = await getChatCompletion([{ role: 'user', content: prompt }], {
-    mockType: 'summary',
+    mockType: 'study_plan',
+    responseMimeType: 'application/json',
+    responseSchema: STUDY_PLAN_RESPONSE_SCHEMA,
   });
 
   let schedule: unknown[] = [];
   try {
-    schedule = JSON.parse(text);
-  } catch {
-    schedule = [];
+    schedule = JSON.parse(text) as unknown[];
+  } catch (parseError) {
+    console.error('Failed to parse study plan response:', parseError);
+    return errorResponse('Failed to parse generated study plan', StatusCodes.INTERNAL_ERROR);
   }
 
   const planData = {

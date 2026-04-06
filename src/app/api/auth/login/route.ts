@@ -1,27 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
+import { errorResponse, successResponse, StatusCodes } from '@/shared/lib/api/auth';
 import { getAdminAuth } from '@/shared/lib/firebase/admin';
 import { setSessionCookie } from '@/shared/lib/firebase/server-auth';
 import { LoginRequest, LoginResponse } from '@/shared/types/api';
 
-export async function POST(request: NextRequest): Promise<NextResponse<LoginResponse>> {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body: LoginRequest = await request.json();
     const { email, password } = body;
 
     if (!email || !password) {
-      return NextResponse.json(
-        { success: false, error: 'Email and password are required' },
-        { status: 400 },
-      );
+      return errorResponse('Email and password are required', StatusCodes.BAD_REQUEST);
     }
 
     const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'Server configuration error' },
-        { status: 500 },
-      );
+      return errorResponse('Server configuration error', StatusCodes.INTERNAL_ERROR);
     }
 
     const signInResponse = await fetch(
@@ -44,29 +39,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<LoginResp
       const errorMessage = errorData.error?.message || 'Authentication failed';
 
       if (errorMessage === 'EMAIL_NOT_FOUND' || errorMessage === 'INVALID_PASSWORD') {
-        return NextResponse.json(
-          { success: false, error: 'Invalid email or password' },
-          { status: 401 },
-        );
+        return errorResponse('Invalid email or password', StatusCodes.UNAUTHORIZED);
       }
 
       if (errorMessage === 'USER_DISABLED') {
-        return NextResponse.json(
-          { success: false, error: 'This account has been disabled' },
-          { status: 403 },
-        );
+        return errorResponse('This account has been disabled', StatusCodes.FORBIDDEN);
       }
 
       if (errorMessage === 'TOO_MANY_ATTEMPTS_TRY_LATER') {
-        return NextResponse.json(
-          { success: false, error: 'Too many failed attempts. Please try again later.' },
-          { status: 429 },
-        );
+        return errorResponse('Too many failed attempts. Please try again later.', 429);
       }
 
-      return NextResponse.json(
-        { success: false, error: 'Login failed. Please check your credentials.' },
-        { status: 401 },
+      return errorResponse(
+        'Login failed. Please check your credentials.',
+        StatusCodes.UNAUTHORIZED,
       );
     }
 
@@ -74,24 +60,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<LoginResp
     const idToken = signInData.idToken;
 
     if (!idToken) {
-      return NextResponse.json(
-        { success: false, error: 'Failed to obtain authentication token' },
-        { status: 500 },
-      );
+      return errorResponse('Failed to obtain authentication token', StatusCodes.INTERNAL_ERROR);
     }
 
     await setSessionCookie(idToken);
 
     const auth = getAdminAuth();
     if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'Server configuration error' },
-        { status: 500 },
-      );
+      return errorResponse('Server configuration error', StatusCodes.INTERNAL_ERROR);
     }
     const decodedToken = await auth.verifyIdToken(idToken);
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       session: {
         access_token: idToken,
@@ -102,9 +82,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<LoginResp
   } catch (error: unknown) {
     console.error('Login error:', error);
 
-    return NextResponse.json(
-      { success: false, error: 'An unexpected error occurred. Please try again.' },
-      { status: 500 },
+    return errorResponse(
+      'An unexpected error occurred. Please try again.',
+      StatusCodes.INTERNAL_ERROR,
     );
   }
 }

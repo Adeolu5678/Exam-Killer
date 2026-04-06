@@ -1,5 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
+import { Timestamp } from 'firebase-admin/firestore';
+
+import { errorResponse, successResponse, StatusCodes } from '@/shared/lib/api/auth';
 import { getAdminAuth, getAdminDb } from '@/shared/lib/firebase/admin';
 import { SignupRequest, SignupResponse } from '@/shared/types/api';
 import { TutorPersonality, SubscriptionStatus } from '@/shared/types/database';
@@ -35,38 +38,29 @@ function generateReferralCode(): string {
   return code;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<SignupResponse>> {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body: SignupRequest = await request.json();
     const { email, password, full_name, matric_number, department, level, referral_code } = body;
 
     if (!email || !password || !full_name) {
-      return NextResponse.json(
-        { success: false, error: 'Email, password, and full name are required' },
-        { status: 400 },
-      );
+      return errorResponse('Email, password, and full name are required', StatusCodes.BAD_REQUEST);
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return NextResponse.json({ success: false, error: 'Invalid email format' }, { status: 400 });
+      return errorResponse('Invalid email format', StatusCodes.BAD_REQUEST);
     }
 
     if (password.length < 6) {
-      return NextResponse.json(
-        { success: false, error: 'Password must be at least 6 characters' },
-        { status: 400 },
-      );
+      return errorResponse('Password must be at least 6 characters', StatusCodes.BAD_REQUEST);
     }
 
     const auth = getAdminAuth();
     const db = getAdminDb();
 
     if (!auth || !db) {
-      return NextResponse.json(
-        { success: false, error: 'Server configuration error' },
-        { status: 500 },
-      );
+      return errorResponse('Server configuration error', StatusCodes.INTERNAL_ERROR);
     }
 
     const userRecord = await auth.createUser({
@@ -82,19 +76,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignupRes
       matric_number: matric_number || null,
       department: department || null,
       level: level || null,
-      subscription_status: 'free' as SubscriptionStatus,
+      subscription_status: 'inactive' as SubscriptionStatus,
       subscription_tier: 'free',
       paid_until: null,
       free_explanations_used: 0,
       free_ai_queries_used: 0,
-      free_ai_queries_limit: 10,
+      free_ai_queries_limit: 5,
       current_streak: 0,
       total_xp: 0,
       preferred_tutor_personality: 'mentor' as TutorPersonality,
       referral_code: generateReferralCode(),
       referral_credits: 0,
-      created_at: require('firebase-admin/firestore').Timestamp.now(),
-      updated_at: require('firebase-admin/firestore').Timestamp.now(),
+      created_at: Timestamp.now() as any,
+      updated_at: Timestamp.now() as any,
     };
 
     if (referral_code) {
@@ -115,7 +109,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignupRes
 
     await db.collection('users').doc(userRecord.uid).set(userDocData);
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       user: {
         id: userRecord.uid,
@@ -128,28 +122,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignupRes
     if (error && typeof error === 'object' && 'code' in error) {
       const firebaseError = error as { code: string };
       if (firebaseError.code === 'auth/email-already-exists') {
-        return NextResponse.json(
-          { success: false, error: 'An account with this email already exists' },
-          { status: 400 },
-        );
+        return errorResponse('An account with this email already exists', StatusCodes.BAD_REQUEST);
       }
       if (firebaseError.code === 'auth/invalid-email') {
-        return NextResponse.json(
-          { success: false, error: 'Invalid email address' },
-          { status: 400 },
-        );
+        return errorResponse('Invalid email address', StatusCodes.BAD_REQUEST);
       }
       if (firebaseError.code === 'auth/weak-password') {
-        return NextResponse.json(
-          { success: false, error: 'Password is too weak' },
-          { status: 400 },
-        );
+        return errorResponse('Password is too weak', StatusCodes.BAD_REQUEST);
       }
     }
 
-    return NextResponse.json(
-      { success: false, error: 'Failed to create account. Please try again.' },
-      { status: 500 },
-    );
+    return errorResponse('Failed to create account. Please try again.', StatusCodes.INTERNAL_ERROR);
   }
 }

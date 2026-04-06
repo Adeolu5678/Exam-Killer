@@ -16,19 +16,11 @@ const FOOTER_COLS = [
     ],
   },
   {
-    heading: 'Company',
+    heading: 'Get Started',
     links: [
-      { label: 'About', href: '#' },
-      { label: 'Contact', href: '#' },
-      { label: 'Blog', href: '#' },
-    ],
-  },
-  {
-    heading: 'Legal',
-    links: [
-      { label: 'Privacy Policy', href: '#' },
-      { label: 'Terms of Service', href: '#' },
-      { label: 'Cookie Policy', href: '#' },
+      { label: 'Sign In', href: '/auth/login' },
+      { label: 'Create Account', href: '/auth/signup' },
+      { label: 'Dashboard', href: '/dashboard' },
     ],
   },
 ];

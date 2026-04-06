@@ -166,6 +166,13 @@
   --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+[data-density='compact'] {
+  --topbar-height: 44px;
+  --workspace-subnav-height: 40px;
+  --font-size-base: 0.875rem;
+  --font-size-sm: 0.75rem;
+}
+
 /* =============================================================================
    BASE RESET & DOCUMENT STYLES
    ============================================================================= */
@@ -206,6 +213,10 @@ body {
   transition:
     background-color var(--duration-slow) var(--ease-standard),
     color var(--duration-slow) var(--ease-standard);
+}
+
+[data-density='compact'] body {
+  line-height: 1.4;
 }
 
 /* Typography base */
