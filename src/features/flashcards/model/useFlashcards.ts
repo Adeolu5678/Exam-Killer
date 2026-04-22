@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import type { FlashcardItem } from './types';
 import {
   fetchFlashcards,
+  fetchFlashcardReviewHistory,
   createFlashcard,
   generateFlashcards,
   updateFlashcard,
@@ -22,6 +23,7 @@ export const flashcardKeys = {
   all: (workspaceId: string) => ['flashcards', workspaceId] as const,
   list: (workspaceId: string) => ['flashcards', workspaceId, 'list'] as const,
   detail: (flashcardId: string) => ['flashcards', 'detail', flashcardId] as const,
+  reviewHistory: (workspaceId: string) => ['flashcards', workspaceId, 'review-history'] as const,
 };
 
 // ── Fetch list ────────────────────────────────────────────────────────────────
@@ -32,6 +34,17 @@ export function useFlashcards(workspaceId: string) {
     enabled: Boolean(workspaceId),
     staleTime: 30_000,
     select: (data) => data.flashcards,
+  });
+}
+
+// ── Review history ────────────────────────────────────────────────────────────
+export function useFlashcardReviewHistory(workspaceId: string, limit: number = 20) {
+  return useQuery({
+    queryKey: [...flashcardKeys.reviewHistory(workspaceId), limit] as const,
+    queryFn: () => fetchFlashcardReviewHistory(workspaceId, limit),
+    enabled: Boolean(workspaceId),
+    staleTime: 30_000,
+    select: (data) => data.history,
   });
 }
 
@@ -138,6 +151,21 @@ export function useReviewFlashcard(workspaceId: string) {
       submitFlashcardReview(flashcardId, quality),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: flashcardKeys.all(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: ['analytics'] });
+    },
+    onError: (err: any) => {
+      if (err?.upgradeRequired || err?.message?.includes('Premium')) {
+        toast.error('Premium required', {
+          description: 'Spaced repetition review is available on Premium plans.',
+          action: {
+            label: 'Upgrade',
+            onClick: () => (window.location.href = '/pricing'),
+          },
+        });
+        return;
+      }
+
+      toast.error(err instanceof Error ? err.message : 'Failed to submit review');
     },
   });
 }

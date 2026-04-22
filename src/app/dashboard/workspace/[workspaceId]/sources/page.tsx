@@ -69,8 +69,8 @@ export default function SourcesPage({ params }: SourcesPageProps) {
             maxWidth: '60ch',
           }}
         >
-          Upload PDFs, images, or text files. Your AI tutor and flashcard generator will use these
-          as their knowledge base.
+          Upload PDFs or text files. Your AI tutor and flashcard generator will use these as their
+          knowledge base.
         </p>
       </header>
 

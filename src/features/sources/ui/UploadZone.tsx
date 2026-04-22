@@ -185,12 +185,12 @@ export function UploadZone({ workspaceId, className }: UploadZoneProps) {
         <span className={styles.highlight}>Click to upload</span> or drag &amp; drop
       </p>
       <p className={styles.subtitle}>
-        PDF, PNG, JPEG, WebP, or plain text · Max {MAX_SIZE_MB} MB per file
+        PDF or plain text · Max {MAX_SIZE_MB} MB per file
       </p>
 
       {/* Accepted type pills */}
       <div className={styles.acceptedTypes} aria-label="Accepted file types">
-        {['PDF', 'PNG', 'JPEG', 'WebP', 'TXT'].map((t) => (
+        {["PDF", "TXT"].map((t) => (
           <span key={t} className={styles.typePill}>
             .{t.toLowerCase()}
           </span>

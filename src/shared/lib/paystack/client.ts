@@ -99,14 +99,16 @@ export interface VerifyPaymentResponse {
   success: boolean;
   data?: {
     status: string;
+    id?: string | number;
+    reference?: string;
     amount: number;
     currency: string;
     customer: {
       email: string;
     };
-    metadata: {
-      userId: string;
-      plan: string;
+    metadata?: Record<string, unknown>;
+    authorization?: {
+      authorization_code?: string;
     };
   };
   message?: string;
@@ -145,10 +147,13 @@ export async function verifyPayment(params: VerifyPaymentParams): Promise<Verify
         success: false,
         data: {
           status: data.data.status,
+          id: data.data.id,
+          reference: data.data.reference,
           amount: data.data.amount,
           currency: data.data.currency,
           customer: data.data.customer,
           metadata: data.data.metadata,
+          authorization: data.data.authorization,
         },
         message: 'Payment was not successful',
       };
@@ -158,10 +163,13 @@ export async function verifyPayment(params: VerifyPaymentParams): Promise<Verify
       success: true,
       data: {
         status: data.data.status,
+        id: data.data.id,
+        reference: data.data.reference,
         amount: data.data.amount,
         currency: data.data.currency,
         customer: data.data.customer,
         metadata: data.data.metadata,
+        authorization: data.data.authorization,
       },
     };
   } catch (error) {

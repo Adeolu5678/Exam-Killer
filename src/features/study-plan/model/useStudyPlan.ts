@@ -3,7 +3,7 @@
 // Layer: features → study-plan → model
 // =============================================================================
 
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import {
@@ -14,14 +14,20 @@ import {
   type UpdateStudySessionPayload,
   type CreateExamDatePayload,
   type UpdateExamDatePayload,
+  type GenerateStudyPlanPayload,
+  type UpdateGeneratedStudyPlanPayload,
 } from './types';
 import {
   fetchStudySessions,
   fetchStudySession,
+  fetchStudyPlans,
   createStudySession,
   updateStudySession,
   deleteStudySession,
   completeStudySession,
+  generateWorkspaceStudyPlan,
+  updateGeneratedStudyPlan,
+  completeGeneratedStudyPlanItem,
   fetchExamDates,
   createExamDate,
   updateExamDate,
@@ -52,6 +58,16 @@ export function useStudySession(workspaceId: string, sessionId: string) {
   });
 }
 
+/** Query: fetch generated plans for a workspace. */
+export function useStudyPlans(workspaceId: string) {
+  return useQuery({
+    queryKey: studyPlanKeys.plans(workspaceId),
+    queryFn: () => fetchStudyPlans(workspaceId),
+    enabled: Boolean(workspaceId),
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
 /** Mutation: create a study session. */
 export function useCreateStudySession(workspaceId: string) {
   const queryClient = useQueryClient();
@@ -61,6 +77,9 @@ export function useCreateStudySession(workspaceId: string) {
       toast.success('Study session created!');
       void queryClient.invalidateQueries({
         queryKey: studyPlanKeys.sessions(workspaceId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: studyPlanKeys.bundle(workspaceId),
       });
     },
     onError: (error: Error) => {
@@ -102,11 +121,14 @@ export function useUpdateStudySession(workspaceId: string) {
         queryClient.setQueryData(studyPlanKeys.sessions(workspaceId), ctx.prev);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: studyPlanKeys.sessions(workspaceId),
-      });
-    },
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.sessions(workspaceId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.bundle(workspaceId),
+        });
+      },
   });
 }
 
@@ -137,11 +159,14 @@ export function useDeleteStudySession(workspaceId: string) {
         queryClient.setQueryData(studyPlanKeys.sessions(workspaceId), ctx.prev);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: studyPlanKeys.sessions(workspaceId),
-      });
-    },
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.sessions(workspaceId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.bundle(workspaceId),
+        });
+      },
   });
 }
 
@@ -169,6 +194,7 @@ export function useCompleteStudySession(workspaceId: string) {
     },
     onSuccess: () => {
       toast.success('Session completed! Keep it up! 🎯');
+      void queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
     onError: (err: Error, _vars, ctx) => {
       toast.error(err.message || 'Failed to complete session');
@@ -176,11 +202,14 @@ export function useCompleteStudySession(workspaceId: string) {
         queryClient.setQueryData(studyPlanKeys.sessions(workspaceId), ctx.prev);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: studyPlanKeys.sessions(workspaceId),
-      });
-    },
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.sessions(workspaceId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.bundle(workspaceId),
+        });
+      },
   });
 }
 
@@ -203,12 +232,15 @@ export function useCreateExamDate(workspaceId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateExamDatePayload) => createExamDate(workspaceId, payload),
-    onSuccess: () => {
-      toast.success('Exam date added');
-      void queryClient.invalidateQueries({
-        queryKey: studyPlanKeys.exams(workspaceId),
-      });
-    },
+      onSuccess: () => {
+        toast.success('Exam date added');
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.exams(workspaceId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.bundle(workspaceId),
+        });
+      },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to add exam date');
     },
@@ -243,11 +275,14 @@ export function useUpdateExamDate(workspaceId: string) {
         queryClient.setQueryData(studyPlanKeys.exams(workspaceId), ctx.prev);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: studyPlanKeys.exams(workspaceId),
-      });
-    },
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.exams(workspaceId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.bundle(workspaceId),
+        });
+      },
   });
 }
 
@@ -278,10 +313,84 @@ export function useDeleteExamDate(workspaceId: string) {
         queryClient.setQueryData(studyPlanKeys.exams(workspaceId), ctx.prev);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: studyPlanKeys.exams(workspaceId),
-      });
-    },
-  });
-}
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.exams(workspaceId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: studyPlanKeys.bundle(workspaceId),
+        });
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Generated Study Plan Hooks
+  // ---------------------------------------------------------------------------
+
+  /** Mutation: generate AI study plan. */
+  export function useGenerateStudyPlan(workspaceId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: (payload: GenerateStudyPlanPayload) =>
+        generateWorkspaceStudyPlan(workspaceId, payload),
+      onSuccess: () => {
+        toast.success('AI study plan generated');
+        void queryClient.invalidateQueries({ queryKey: studyPlanKeys.plans(workspaceId) });
+        void queryClient.invalidateQueries({ queryKey: studyPlanKeys.bundle(workspaceId) });
+      },
+      onError: (err: Error) => {
+        toast.error(err.message || 'Failed to generate study plan');
+      },
+    });
+  }
+
+  /** Mutation: update generated study plan metadata. */
+  export function useUpdateGeneratedStudyPlan(workspaceId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: ({
+        planId,
+        payload,
+      }: {
+        planId: string;
+        payload: UpdateGeneratedStudyPlanPayload;
+      }) => updateGeneratedStudyPlan(workspaceId, planId, payload),
+      onSuccess: () => {
+        toast.success('Study plan updated');
+      },
+      onError: (err: Error) => {
+        toast.error(err.message || 'Failed to update study plan');
+      },
+      onSettled: () => {
+        void queryClient.invalidateQueries({ queryKey: studyPlanKeys.plans(workspaceId) });
+        void queryClient.invalidateQueries({ queryKey: studyPlanKeys.bundle(workspaceId) });
+      },
+    });
+  }
+
+  /** Mutation: mark generated plan item complete/incomplete. */
+  export function useCompleteStudyPlanItem(workspaceId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: ({
+        planId,
+        itemIndex,
+        completed,
+      }: {
+        planId: string;
+        itemIndex: number;
+        completed: boolean;
+      }) => completeGeneratedStudyPlanItem(workspaceId, planId, itemIndex, completed),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      },
+      onError: (err: Error) => {
+        toast.error(err.message || 'Failed to update study plan item');
+      },
+      onSettled: () => {
+        void queryClient.invalidateQueries({ queryKey: studyPlanKeys.plans(workspaceId) });
+        void queryClient.invalidateQueries({ queryKey: studyPlanKeys.bundle(workspaceId) });
+      },
+    });
+  }

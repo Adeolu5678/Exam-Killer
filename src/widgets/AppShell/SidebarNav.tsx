@@ -21,6 +21,7 @@ import {
   Zap,
   LogOut,
   ShieldCheck,
+  Gauge,
 } from 'lucide-react';
 
 import type { ProfileResponse } from '@/shared/types/api';
@@ -199,16 +200,28 @@ export function SidebarNav({ collapsed, onItemClick, onLogout }: SidebarNavProps
       ))}
 
       {isAdmin && (
-        <NavItem
-          item={{
-            href: '/admin/verifications',
-            label: 'Admin Review',
-            icon: <ShieldCheck size={18} aria-hidden="true" />,
-          }}
-          collapsed={collapsed}
-          pathname={pathname}
-          onItemClick={onItemClick}
-        />
+        <>
+          <NavItem
+            item={{
+              href: '/admin/verifications',
+              label: 'Admin Review',
+              icon: <ShieldCheck size={18} aria-hidden="true" />,
+            }}
+            collapsed={collapsed}
+            pathname={pathname}
+            onItemClick={onItemClick}
+          />
+          <NavItem
+            item={{
+              href: '/admin/operations',
+              label: 'Launch Readiness',
+              icon: <Gauge size={18} aria-hidden="true" />,
+            }}
+            collapsed={collapsed}
+            pathname={pathname}
+            onItemClick={onItemClick}
+          />
+        </>
       )}
 
       {onLogout && (

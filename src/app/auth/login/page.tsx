@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -52,10 +52,20 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [passwordResetMessage, setPasswordResetMessage] = useState<string | null>(null);
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated, loading, error, clearError } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, loading, router]);
 
   if (!isFirebaseConfigured) {
     return <FirebaseNotConfigured />;
+  }
+
+  if (isAuthenticated && !loading) {
+    return null;
   }
 
   const validateForm = (): boolean => {
@@ -79,6 +89,7 @@ export default function LoginPage() {
 
   const handleEmailLogin = async (e: FormEvent) => {
     e.preventDefault();
+    clearError();
 
     if (!validateForm()) return;
 
@@ -106,6 +117,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    clearError();
     setIsLoading(true);
     setErrors({});
     setPasswordResetMessage(null);
@@ -164,9 +176,9 @@ export default function LoginPage() {
         <p className="mt-1 text-sm text-indigo-200">Sign in to your account</p>
       </div>
 
-      {errors.general && (
+      {(errors.general ?? error?.message) && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/20 px-4 py-3 text-sm text-red-200">
-          {errors.general}
+          {errors.general ?? error?.message}
         </div>
       )}
       {passwordResetMessage && (

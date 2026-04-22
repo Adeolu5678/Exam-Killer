@@ -12,11 +12,11 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import type { User } from 'firebase/auth';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpenCheck, PanelLeftClose, PanelLeftOpen, Search, LogOut } from 'lucide-react';
+import { BookOpenCheck, LogOut, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
 
 import { AuthContext } from '@/context/AuthContext';
+import type { ViewerProfile } from '@/domains/users/contracts/viewer';
 
 import { useAppShellStore } from '@/shared/stores/ui-store';
 import { Avatar } from '@/shared/ui';
@@ -67,7 +67,7 @@ function LogoMark({ collapsed }: { collapsed: boolean }) {
 // ---------------------------------------------------------------------------
 
 interface TopBarProps {
-  user: User | null;
+  viewer: ViewerProfile | null;
   isCollapsed: boolean;
   onToggleSidebar: () => void;
   onOpenMobile: () => void;
@@ -76,14 +76,14 @@ interface TopBarProps {
 }
 
 function TopBar({
-  user,
+  viewer,
   isCollapsed,
   onToggleSidebar,
   onOpenMobile,
   onOpenCommandPalette,
   onLogout,
 }: TopBarProps) {
-  const displayName = user?.displayName ?? user?.email?.split('@')[0] ?? 'User';
+  const displayName = viewer?.display_name ?? viewer?.full_name ?? viewer?.email?.split('@')[0] ?? 'User';
 
   return (
     <header
@@ -143,7 +143,7 @@ function TopBar({
           title={`Settings for ${displayName}`}
           className="flex items-center gap-2 rounded-lg p-1 transition-colors duration-[var(--duration-fast)] hover:bg-[var(--color-bg-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
         >
-          <Avatar name={displayName} src={user?.photoURL ?? undefined} size="sm" />
+          <Avatar name={displayName} src={viewer?.photo_url ?? undefined} size="sm" />
         </Link>
 
         <button
@@ -171,7 +171,10 @@ interface SidebarProps {
 }
 
 function Sidebar({ isCollapsed, onToggle, subscription, onLogout }: SidebarProps) {
-  const isFree = !subscription || subscription.plan === 'free';
+  const isPremiumActive =
+    subscription?.status === 'active' &&
+    (subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual');
+  const isFree = !isPremiumActive;
 
   return (
     <aside
@@ -277,11 +280,11 @@ function MobileDrawer({ isOpen, onClose, onLogout }: MobileDrawerProps) {
 
 interface AppShellProps {
   children: React.ReactNode;
-  user: User | null;
+  viewer: ViewerProfile | null;
   subscription: { plan: string; status: string } | null;
 }
 
-export function AppShell({ children, user, subscription }: AppShellProps) {
+export function AppShell({ children, viewer, subscription }: AppShellProps) {
   const {
     isSidebarCollapsed,
     isMobileDrawerOpen,
@@ -327,7 +330,7 @@ export function AppShell({ children, user, subscription }: AppShellProps) {
 
       {/* TopBar */}
       <TopBar
-        user={user}
+        viewer={viewer}
         isCollapsed={isSidebarCollapsed}
         onToggleSidebar={toggleSidebar}
         onOpenMobile={openMobileDrawer}

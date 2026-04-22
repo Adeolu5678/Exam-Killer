@@ -1,40 +1,66 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   type User,
   onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
+  signInWithCustomToken,
   signInWithPopup,
   signOut as firebaseSignOut,
-  type AuthError,
 } from 'firebase/auth';
 
+import type { ViewerProfile, ViewerSession } from '@/domains/users/contracts/viewer';
+
 import { auth, googleProvider, isFirebaseConfigured } from '@/shared/lib/firebase/client';
-import type {
-  SubscriptionPlan,
-  UserSubscription,
-  UsageStats,
+import {
+  SUBSCRIPTION_PLANS,
+  canAccessFeature,
+  isFeatureKey,
+  type FeatureKey,
 } from '@/shared/lib/paystack/subscription';
-import { SUBSCRIPTION_PLANS } from '@/shared/lib/paystack/subscription';
 
-type SubscriptionInfo = UserSubscription;
+type SubscriptionInfo = {
+  plan: 'free' | 'premium_monthly' | 'premium_annual';
+  status: 'active' | 'inactive' | 'past_due';
+  currentPeriodEnd?: string;
+  isTrial?: boolean;
+  hasHadTrial?: boolean;
+  paystackAuthorizationCode?: string;
+  matricNumber?: string;
+  institution?: string;
+  verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  verificationMediaUrl?: string;
+  verificationSubmittedAt?: string;
+};
 
-interface UsageInfo {
+type UsageInfo = {
   workspacesCount: number;
   fileUploadsThisMonth: number;
   aiQueriesToday: number;
   flashcardsCount: number;
+};
+
+interface RegisterInput {
+  email: string;
+  password: string;
+  full_name: string;
+  matric_number?: string | null;
+  department?: string | null;
+  level?: number | null;
+  referral_code?: string | null;
 }
 
 interface AuthContextType {
   user: User | null;
+  viewer: ViewerProfile | null;
+  sessionStatus: ViewerSession['status'];
+  sessionExpiresAt: string | null;
   loading: boolean;
-  error: AuthError | null;
+  error: Error | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
+  register: (input: RegisterInput) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -42,170 +68,324 @@ interface AuthContextType {
   usage: UsageInfo | null;
   canUseFeature: (feature: string) => boolean;
   isLoadingSubscription: boolean;
+  isAuthenticated: boolean;
+  refreshSession: () => Promise<void>;
 }
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-async function setSessionCookie(idToken: string): Promise<void> {
-  const response = await fetch('/api/auth/session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ idToken }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to set session cookie');
-  }
+interface ApiSuccessEnvelope<T> {
+  success: true;
+  data: T;
 }
 
-async function clearSessionCookie(): Promise<void> {
-  const response = await fetch('/api/auth/session', {
-    method: 'DELETE',
-  });
+interface ApiErrorEnvelope {
+  success: false;
+  error: {
+    code: string;
+    message: string;
+  };
+}
 
-  if (!response.ok) {
-    throw new Error('Failed to clear session cookie');
+type ApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiErrorEnvelope;
+
+interface LoginResponseData {
+  session: {
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+  };
+  custom_token?: string | null;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const ANONYMOUS_SESSION: ViewerSession = {
+  status: 'anonymous',
+  session_expires_at: null,
+  viewer: null,
+};
+
+function normalizeError(error: unknown, fallbackMessage: string): Error {
+  if (error instanceof Error) {
+    return error;
   }
+
+  return new Error(fallbackMessage);
+}
+
+async function readApiData<T>(response: Response, fallbackMessage: string): Promise<T> {
+  let payload: ApiEnvelope<T> | null = null;
+
+  try {
+    payload = (await response.json()) as ApiEnvelope<T>;
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+
+  if (!response.ok || !payload.success) {
+    const message = payload && !payload.success ? payload.error.message : fallbackMessage;
+    throw new Error(message);
+  }
+
+  return payload.data;
+}
+
+function toSubscriptionInfo(viewer: ViewerProfile | null): SubscriptionInfo | null {
+  if (!viewer) {
+    return null;
+  }
+
+  return {
+    plan: viewer.subscription.plan,
+    status: viewer.subscription.status,
+    currentPeriodEnd: viewer.subscription.current_period_end ?? undefined,
+    isTrial: viewer.subscription.is_trial,
+    hasHadTrial: viewer.subscription.has_had_trial,
+    paystackAuthorizationCode: viewer.subscription.paystack_authorization_code ?? undefined,
+    matricNumber: viewer.matric_number ?? undefined,
+    institution: viewer.subscription.institution ?? undefined,
+    verificationStatus: viewer.subscription.verification_status,
+    verificationMediaUrl: viewer.subscription.verification_media_url ?? undefined,
+    verificationSubmittedAt: viewer.subscription.verification_submitted_at ?? undefined,
+  };
+}
+
+function toUsageInfo(viewer: ViewerProfile | null): UsageInfo | null {
+  if (!viewer) {
+    return null;
+  }
+
+  return {
+    workspacesCount: viewer.usage.workspaces_count,
+    fileUploadsThisMonth: viewer.usage.file_uploads_this_month,
+    aiQueriesToday: viewer.usage.ai_queries_today,
+    flashcardsCount: viewer.usage.flashcards_count,
+  };
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<AuthError | null>(null);
-  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
-  const [usage, setUsage] = useState<UsageInfo | null>(null);
-  const [isLoadingSubscription, setIsLoadingSubscription] = useState(false);
+  const [viewerSession, setViewerSession] = useState<ViewerSession>(ANONYMOUS_SESSION);
+  const [authLoading, setAuthLoading] = useState(isFirebaseConfigured);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const viewer = viewerSession.viewer;
+  const subscription = useMemo(() => toSubscriptionInfo(viewer), [viewer]);
+  const usage = useMemo(() => toUsageInfo(viewer), [viewer]);
+
+  const loadViewerSession = useCallback(async (): Promise<ViewerSession> => {
+    const response = await fetch('/api/v1/me', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+
+    return readApiData<ViewerSession>(response, 'Failed to load session');
+  }, []);
+
+  const syncServerSession = useCallback(async (idToken: string): Promise<void> => {
+    const response = await fetch('/api/v1/auth/session', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({ idToken }),
+    });
+
+    await readApiData<{ success: boolean }>(response, 'Failed to sync session');
+  }, []);
+
+  const refreshSession = useCallback(async (): Promise<void> => {
+    setSessionLoading(true);
+
+    try {
+      const session = await loadViewerSession();
+      setViewerSession(session);
+    } catch {
+      setViewerSession(ANONYMOUS_SESSION);
+    } finally {
+      setSessionLoading(false);
+    }
+  }, [loadViewerSession]);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) {
-      setLoading(false);
-      return;
+      setAuthLoading(false);
+      return undefined;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const idToken = await firebaseUser.getIdToken();
-          await setSessionCookie(idToken);
-        } catch {
-          console.error('Failed to set session cookie');
-        }
-      } else {
-        try {
-          await clearSessionCookie();
-        } catch (err) {
-          console.error('Failed to clear session cookie', err);
-        }
-      }
-
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false);
+      setAuthLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (user) {
-      setIsLoadingSubscription(true);
-      fetch('/api/payments/status')
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error('Failed to fetch subscription status');
-          }
-          return res.json();
-        })
-        .then((data) => {
-          setSubscription(data.subscription);
-          setUsage(data.usage);
-        })
-        .catch((err) => {
-          console.error('Failed to fetch subscription:', err);
-          setSubscription(null);
-          setUsage(null);
-        })
-        .finally(() => setIsLoadingSubscription(false));
-    } else {
-      setSubscription(null);
-      setUsage(null);
-    }
-  }, [user]);
+    void refreshSession();
+  }, [refreshSession]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    if (!isFirebaseConfigured || !auth) {
-      throw new Error('Firebase is not configured');
+  useEffect(() => {
+    if (!user || viewerSession.status === 'authenticated') {
+      return undefined;
     }
-    setError(null);
-    setLoading(true);
 
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await result.user.getIdToken();
-      await setSessionCookie(idToken);
-    } catch (err) {
-      setError(err as AuthError);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    let cancelled = false;
 
-  const signup = useCallback(async (email: string, password: string) => {
-    if (!isFirebaseConfigured || !auth) {
-      throw new Error('Firebase is not configured');
-    }
-    setError(null);
-    setLoading(true);
+    const ensureServerSession = async () => {
+      try {
+        const idToken = await user.getIdToken();
+        await syncServerSession(idToken);
 
-    try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await result.user.getIdToken();
-      await setSessionCookie(idToken);
-    } catch (err) {
-      setError(err as AuthError);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        if (!cancelled) {
+          await refreshSession();
+        }
+      } catch {
+        if (!cancelled) {
+          setViewerSession(ANONYMOUS_SESSION);
+        }
+      }
+    };
+
+    void ensureServerSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshSession, syncServerSession, user, viewerSession.status]);
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setError(null);
+      setSessionLoading(true);
+
+      try {
+        const response = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({ email, password }),
+        });
+
+        const data = await readApiData<LoginResponseData>(response, 'Failed to log in');
+
+        if (isFirebaseConfigured && auth && data.custom_token) {
+          await signInWithCustomToken(auth, data.custom_token);
+        }
+
+        const session = await loadViewerSession();
+        setViewerSession(session);
+      } catch (loginError) {
+        setViewerSession(ANONYMOUS_SESSION);
+        const normalizedError = normalizeError(loginError, 'Failed to log in');
+        setError(normalizedError);
+        throw normalizedError;
+      } finally {
+        setSessionLoading(false);
+      }
+    },
+    [loadViewerSession],
+  );
+
+  const register = useCallback(
+    async (input: RegisterInput) => {
+      setError(null);
+      setSessionLoading(true);
+
+      try {
+        const response = await fetch('/api/v1/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(input),
+        });
+
+        await readApiData<{ user: { id: string; email: string } }>(response, 'Failed to create account');
+        await login(input.email, input.password);
+      } catch (signupError) {
+        const normalizedError = normalizeError(signupError, 'Failed to create account');
+        setError(normalizedError);
+        throw normalizedError;
+      } finally {
+        setSessionLoading(false);
+      }
+    },
+    [login],
+  );
+
+  const signup = useCallback(
+    async (email: string, password: string) => {
+      const fallbackName = email.split('@')[0]?.trim() || 'Student';
+
+      await register({
+        email,
+        password,
+        full_name: fallbackName,
+      });
+    },
+    [register],
+  );
 
   const loginWithGoogle = useCallback(async () => {
     if (!isFirebaseConfigured || !auth || !googleProvider) {
-      throw new Error('Firebase is not configured');
+      const configurationError = new Error('Google sign-in is not configured');
+      setError(configurationError);
+      throw configurationError;
     }
+
     setError(null);
-    setLoading(true);
+    setSessionLoading(true);
 
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
-      await setSessionCookie(idToken);
-    } catch (err) {
-      setError(err as AuthError);
-      throw err;
+
+      await syncServerSession(idToken);
+
+      const session = await loadViewerSession();
+      setViewerSession(session);
+    } catch (googleError) {
+      const normalizedError = normalizeError(googleError, 'Failed to sign in with Google');
+      setError(normalizedError);
+      throw normalizedError;
     } finally {
-      setLoading(false);
+      setSessionLoading(false);
     }
-  }, []);
+  }, [loadViewerSession, syncServerSession]);
 
   const logout = useCallback(async () => {
-    if (!isFirebaseConfigured || !auth) {
-      throw new Error('Firebase is not configured');
-    }
     setError(null);
+    setSessionLoading(true);
 
     try {
-      await firebaseSignOut(auth);
-      await clearSessionCookie();
-    } catch (err) {
-      setError(err as AuthError);
-      throw err;
+      const response = await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+
+      await readApiData<{ success: boolean }>(response, 'Failed to log out');
+
+      if (isFirebaseConfigured && auth) {
+        await firebaseSignOut(auth).catch(() => undefined);
+      }
+
+      setViewerSession(ANONYMOUS_SESSION);
+    } catch (logoutError) {
+      const normalizedError = normalizeError(logoutError, 'Failed to log out');
+      setError(normalizedError);
+      throw normalizedError;
+    } finally {
+      setSessionLoading(false);
     }
   }, []);
 
@@ -215,8 +395,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const canUseFeature = useCallback(
     (feature: string): boolean => {
-      if (!subscription) {
+      if (!subscription || !isFeatureKey(feature)) {
         return false;
+      }
+
+      if (
+        feature === 'spacedRepetition' ||
+        feature === 'exportPdf' ||
+        feature === 'exportAnki' ||
+        feature === 'collaboration'
+      ) {
+        return canAccessFeature(
+          {
+            plan: subscription.plan,
+            status: subscription.status,
+            verificationStatus: subscription.verificationStatus,
+          },
+          feature,
+        );
       }
 
       if (subscription.plan === 'free') {
@@ -224,51 +420,87 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         switch (feature) {
           case 'workspaces':
-            if (typeof freePlan.workspaces === 'number' && usage) {
-              return usage.workspacesCount < freePlan.workspaces;
-            }
-            return false;
+            return typeof freePlan.workspaces === 'number' && usage
+              ? usage.workspacesCount < freePlan.workspaces
+              : false;
           case 'fileUploads':
-            if (typeof freePlan.fileUploads === 'number' && usage) {
-              return usage.fileUploadsThisMonth < freePlan.fileUploads;
-            }
-            return false;
+            return typeof freePlan.fileUploads === 'number' && usage
+              ? usage.fileUploadsThisMonth < freePlan.fileUploads
+              : false;
           case 'aiQueriesPerDay':
-            if (typeof freePlan.aiQueriesPerDay === 'number' && usage) {
-              return usage.aiQueriesToday < freePlan.aiQueriesPerDay;
-            }
-            return false;
+            return typeof freePlan.aiQueriesPerDay === 'number' && usage
+              ? usage.aiQueriesToday < freePlan.aiQueriesPerDay
+              : false;
           case 'flashcards':
-            if (typeof freePlan.flashcards === 'number' && usage) {
-              return usage.flashcardsCount < freePlan.flashcards;
-            }
-            return false;
+            return typeof freePlan.flashcards === 'number' && usage
+              ? usage.flashcardsCount < freePlan.flashcards
+              : false;
+          case 'tutorPersonalities':
+            return freePlan.tutorPersonalities.length > 0;
+          case 'analytics':
+            return freePlan.analytics === 'basic' || freePlan.analytics === 'full';
           default:
             return false;
         }
       }
 
-      return subscription.status === 'active';
+      return canAccessFeature(
+        {
+          plan: subscription.plan,
+          status: subscription.status,
+          verificationStatus: subscription.verificationStatus,
+        },
+        feature,
+      );
     },
     [subscription, usage],
   );
 
-  const value: AuthContextType = {
-    user,
-    loading,
-    error,
-    login,
-    signup,
-    loginWithGoogle,
-    logout,
-    clearError,
-    subscription,
-    usage,
-    canUseFeature,
-    isLoadingSubscription,
-  };
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      viewer,
+      sessionStatus: viewerSession.status,
+      sessionExpiresAt: viewerSession.session_expires_at,
+      loading: authLoading || sessionLoading,
+      error,
+      login,
+      signup,
+      register,
+      loginWithGoogle,
+      logout,
+      clearError,
+      subscription,
+      usage,
+      canUseFeature,
+      isLoadingSubscription: sessionLoading,
+      isAuthenticated: viewerSession.status === 'authenticated' && Boolean(viewer),
+      refreshSession,
+    }),
+    [
+      authLoading,
+      canUseFeature,
+      clearError,
+      error,
+      login,
+      loginWithGoogle,
+      logout,
+      refreshSession,
+      register,
+      sessionLoading,
+      signup,
+      subscription,
+      usage,
+      user,
+      viewer,
+      viewerSession.session_expires_at,
+      viewerSession.status,
+    ],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export { AuthContext };
+export type { FeatureKey, RegisterInput, SubscriptionInfo, UsageInfo };
+export { isFeatureKey };

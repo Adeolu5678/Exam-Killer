@@ -119,7 +119,9 @@ async function deleteWorkspaceGraph(
     'study_plans',
     'workspace_members',
     'workspace_invites',
+    'tutor_threads',
     'tutor_messages',
+    'message_citations',
     'chat_sessions',
     'vector_chunks',
   ] as const;
@@ -323,6 +325,7 @@ export const DELETE = withAuth(async (request, { db, userId, user }) => {
     await deleteQueryInChunks(db.collection('workspace_members').where('user_id', '==', userId));
     await deleteQueryInChunks(db.collection('payments').where('user_id', '==', userId));
     await deleteQueryInChunks(db.collection('user_progress').where('user_id', '==', userId));
+    await deleteQueryInChunks(db.collection('tutor_threads').where('user_id', '==', userId));
     await deleteQueryInChunks(db.collection('tutor_messages').where('user_id', '==', userId));
     await deleteQueryInChunks(db.collection('study_sessions').where('user_id', '==', userId));
     await deleteQueryInChunks(db.collection('study_exams').where('user_id', '==', userId));

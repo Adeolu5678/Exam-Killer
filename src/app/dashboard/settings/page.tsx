@@ -47,6 +47,7 @@ import {
 } from '@/shared/ui';
 
 import { VerificationBanner } from '@/features/identity/VerificationBanner';
+import { VerificationForm } from '@/features/identity/VerificationForm';
 
 // ── Page metadata (ignored in client components — kept for reference) ──────
 // export const metadata: Metadata = {   // cannot export from 'use client' components
@@ -56,6 +57,21 @@ import { VerificationBanner } from '@/features/identity/VerificationBanner';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type SettingsTab = 'profile' | 'preferences' | 'billing';
+
+interface ApiSuccessEnvelope<T> {
+  success: true;
+  data: T;
+}
+
+interface ApiErrorEnvelope {
+  success: false;
+  error?: {
+    message?: string;
+    details?: Record<string, unknown>;
+  };
+}
+
+type ApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiErrorEnvelope;
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
@@ -980,33 +996,47 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
   const [isNavigatingToPayment, setIsNavigatingToPayment] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryResponse['payments']>([]);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(true);
+  const [showVerificationForm, setShowVerificationForm] = useState(false);
+
+  const subscription = authContext?.subscription;
+  const verificationStatus = subscription?.verificationStatus || 'none';
+  const canUseSpacedRepetition = Boolean(authContext?.canUseFeature?.('spacedRepetition'));
+  const canExport = Boolean(authContext?.canUseFeature?.('exportPdf'));
+  const effectivePlan = subscription?.status === 'active' ? subscription.plan : ('free' as const);
+  const isVerificationBlockingPremium =
+    subscription?.status === 'active' && effectivePlan !== 'free' && verificationStatus === 'rejected';
 
   const handleSubscribe = async (plan: string, trial: boolean = false) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/payments/initialize', {
+      const response = await fetch('/api/v1/payments/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, trial }),
       });
-      const data = await response.json();
-      if (!response.ok || !data.success)
-        throw new Error(data.message || 'Failed to initialize payment');
-      if (data.authorizationUrl) {
+      const payload = (await response.json()) as ApiEnvelope<{
+        authorization_url: string;
+        reference: string;
+      }>;
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.success ? 'Failed to initialize payment' : payload.error?.message);
+      }
+
+      if (payload.data.authorization_url) {
         setIsNavigatingToPayment(true);
-        window.location.href = data.authorizationUrl;
+        window.location.href = payload.data.authorization_url;
         return;
       }
-      setLoading(false);
+
+      throw new Error('No authorization URL returned from payment initialization');
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
     }
   };
 
-  const subscription = authContext?.subscription;
-  const effectivePlan = subscription?.status === 'active' ? subscription.plan : ('free' as const);
   const currentPlanLabel =
     effectivePlan === 'premium_monthly'
       ? 'Premium Monthly Plan'
@@ -1019,21 +1049,28 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
       : effectivePlan === 'premium_annual'
         ? 'Unlimited workspaces · 100 AI queries/day · Best yearly value'
         : '1 workspace · 3 file uploads/month · 5 AI queries/day';
+  const entitlementSummary = [
+    canUseSpacedRepetition ? 'Spaced repetition unlocked' : 'Spaced repetition locked',
+    canExport ? 'Exports unlocked' : 'Exports locked',
+    isVerificationBlockingPremium ? 'Verification required to restore premium access' : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ');
 
   useEffect(() => {
     let isMounted = true;
 
     const loadPaymentHistory = async () => {
       try {
-        const response = await fetch('/api/payments/history');
-        const data = (await response.json()) as PaymentHistoryResponse & { error?: string };
+        const response = await fetch('/api/v1/payments/history');
+        const payload = (await response.json()) as ApiEnvelope<PaymentHistoryResponse>;
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to load payment history');
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.success ? 'Failed to load payment history' : payload.error?.message);
         }
 
         if (isMounted) {
-          setPaymentHistory(data.payments);
+          setPaymentHistory(payload.data.payments);
         }
       } catch (historyError) {
         if (isMounted) {
@@ -1061,9 +1098,25 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
       {subscription && (
         <div className="mb-4">
           <VerificationBanner
-            status={subscription.verificationStatus || 'none'}
-            onVerifyClick={() => setActiveTab('profile')} // Or open a modal
+            status={verificationStatus}
+            onVerifyClick={() => {
+              setActiveTab('billing');
+              setShowVerificationForm(true);
+            }}
           />
+
+          {showVerificationForm && (verificationStatus === 'none' || verificationStatus === 'rejected') && (
+              <div className="mt-4">
+                <VerificationForm
+                  initialInstitution={subscription.institution}
+                  initialMatric={subscription.matricNumber}
+                  onComplete={async () => {
+                    setShowVerificationForm(false);
+                    await authContext?.refreshSession?.();
+                  }}
+                />
+              </div>
+            )}
         </div>
       )}
 
@@ -1119,11 +1172,51 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
               >
                 {currentPlanSummary}
               </p>
+              <p
+                style={{
+                  color: 'var(--color-text-muted)',
+                  fontSize: 'var(--text-xs)',
+                  margin: '6px 0 0',
+                }}
+              >
+                {entitlementSummary}
+              </p>
             </div>
             <Button variant="primary" size="sm" onClick={() => router.push('/pricing')}>
               {effectivePlan === 'free' ? 'Upgrade to Premium' : 'Manage subscription'}
             </Button>
           </div>
+          {isVerificationBlockingPremium && (
+            <div
+              style={{
+                marginTop: '16px',
+                padding: '14px 16px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                backgroundColor: 'rgba(245, 158, 11, 0.08)',
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  color: 'var(--color-text-primary)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                }}
+              >
+                Premium billing is active, but gated features remain locked until student verification is restored.
+              </p>
+              <p
+                style={{
+                  margin: '6px 0 0',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                Resubmit your document below to restore exports and spaced repetition review.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1149,10 +1242,10 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                 '5 AI queries/day',
                 '10 flashcards',
               ],
-              current: true,
               cta: null,
               variant: 'ghost' as const,
               highlight: false,
+              isCurrent: effectivePlan === 'free',
             },
             {
               name: 'Premium Monthly',
@@ -1168,10 +1261,16 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                 'All tutor personalities',
                 'Ideal for month-to-month flexibility',
               ],
-              cta: 'Start 2-Day Trial',
+              cta:
+                effectivePlan === 'premium_monthly'
+                  ? verificationStatus === 'rejected'
+                    ? 'Restore verification'
+                    : 'Current plan'
+                  : 'Start 2-Day Trial',
               variant: 'primary' as const,
               trial: true,
               highlight: false,
+              isCurrent: effectivePlan === 'premium_monthly',
             },
             {
               name: 'Annual',
@@ -1185,10 +1284,16 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                 '7-day free trial',
                 'Priority support + early access',
               ],
-              cta: 'Start 7-Day Trial',
+              cta:
+                effectivePlan === 'premium_annual'
+                  ? verificationStatus === 'rejected'
+                    ? 'Restore verification'
+                    : 'Current plan'
+                  : 'Start 7-Day Trial',
               variant: 'secondary' as const,
               trial: true,
               highlight: true,
+              isCurrent: effectivePlan === 'premium_annual',
             },
           ].map((plan) => (
             <div
@@ -1262,8 +1367,14 @@ function BillingSection({ setActiveTab }: { setActiveTab: (tab: SettingsTab) => 
                   variant={plan.variant}
                   size="sm"
                   style={{ marginTop: 'auto' }}
-                  onClick={() => handleSubscribe(plan.id!, plan.trial)}
-                  disabled={loading || isNavigatingToPayment}
+                  onClick={() => {
+                    if (plan.isCurrent && verificationStatus === 'rejected') {
+                      setShowVerificationForm(true);
+                      return;
+                    }
+                    handleSubscribe(plan.id!, plan.trial);
+                  }}
+                  disabled={loading || isNavigatingToPayment || (plan.isCurrent && verificationStatus !== 'rejected')}
                   loading={loading || isNavigatingToPayment}
                 >
                   {plan.cta}

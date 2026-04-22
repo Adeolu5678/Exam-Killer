@@ -33,9 +33,24 @@ interface SubscriptionStatus {
   subscription: {
     plan: 'free' | 'premium_monthly' | 'premium_annual';
     status: 'active' | 'inactive' | 'past_due';
-    currentPeriodEnd?: string;
+    current_period_end?: string | null;
+    verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
   };
 }
+
+interface ApiSuccessEnvelope<T> {
+  success: true;
+  data: T;
+}
+
+interface ApiErrorEnvelope {
+  success: false;
+  error?: {
+    message?: string;
+  };
+}
+
+type ApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiErrorEnvelope;
 
 /* ─── Feature data ──────────────────────────────────────────────────── */
 const FREE_FEATURES = [
@@ -284,20 +299,29 @@ export default function PricingPage() {
   const [currentStatus, setCurrentStatus] = useState<'active' | 'inactive' | 'past_due'>(
     'inactive',
   );
+  const [verificationStatus, setVerificationStatus] = useState<
+    'none' | 'pending' | 'verified' | 'rejected'
+  >('none');
   const [paymentLoading, setPaymentLoading] = useState(false);
 
   /* ── Preserved business logic ──────────────────── */
   useEffect(() => {
     async function fetchSubscriptionStatus() {
       try {
-        const response = await fetch('/api/payments/status');
-        if (!response.ok) throw new Error('Failed to fetch subscription status');
-        const data: SubscriptionStatus = await response.json();
-        setCurrentPlan(data.subscription.plan);
-        setCurrentStatus(data.subscription.status);
+        const response = await fetch('/api/v1/payments/status');
+        const payload = (await response.json()) as ApiEnvelope<SubscriptionStatus>;
+        if (!response.ok || !payload.success) {
+          throw new Error(
+            payload.success ? 'Failed to fetch subscription status' : payload.error?.message,
+          );
+        }
+        setCurrentPlan(payload.data.subscription.plan);
+        setCurrentStatus(payload.data.subscription.status);
+        setVerificationStatus(payload.data.subscription.verification_status ?? 'none');
       } catch {
         setCurrentPlan('free');
         setCurrentStatus('inactive');
+        setVerificationStatus('none');
       } finally {
         setLoading(false);
       }
@@ -312,23 +336,38 @@ export default function PricingPage() {
     setPaymentLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/payments/initialize', {
+      const response = await fetch('/api/v1/payments/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, trial }),
       });
-      const data = await response.json();
-      if (!response.ok || !data.success)
-        throw new Error(data.message || 'Failed to initialize payment');
-      if (data.authorizationUrl) window.location.href = data.authorizationUrl;
+      const payload = (await response.json()) as ApiEnvelope<{
+        authorization_url: string;
+        reference: string;
+      }>;
+      if (!response.ok || !payload.success) {
+        throw new Error(
+          payload.success ? 'Failed to initialize payment' : payload.error?.message,
+        );
+      }
+      if (payload.data.authorization_url) {
+        window.location.href = payload.data.authorization_url;
+        return;
+      }
+      throw new Error('No authorization URL returned from payment initialization');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initialize payment');
       setPaymentLoading(false);
     }
   };
 
+  const planIncludesVerificationNotice = (plan: 'premium_monthly' | 'premium_annual') =>
+    currentPlan === plan && currentStatus === 'active' && verificationStatus === 'rejected';
+
   const getButtonText = (plan: 'free' | 'premium_monthly' | 'premium_annual') => {
-    if (plan === currentPlan && currentStatus === 'active') return 'Current Plan';
+    if (plan === currentPlan && currentStatus === 'active') {
+      return verificationStatus === 'rejected' ? 'Restore verification in Settings' : 'Current Plan';
+    }
     if (plan === 'free') return 'Current Plan';
     if (currentPlan === 'free') {
       return plan === 'premium_monthly' ? 'Start 2-Day Free Trial' : 'Start 7-Day Free Trial';
@@ -523,6 +562,28 @@ export default function PricingPage() {
         )}
 
         {/* Pricing cards */}
+        {currentPlan !== 'free' && verificationStatus === 'rejected' && (
+          <div
+            style={{
+              maxWidth: '760px',
+              margin: '0 auto var(--space-8)',
+              padding: 'var(--space-4)',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              color: 'var(--color-text-primary)',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+              Your Premium plan is active, but exports and review mode stay locked until student
+              verification is restored.
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              Go to Settings to resubmit your verification documents and regain premium access.
+            </p>
+          </div>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -540,7 +601,7 @@ export default function PricingPage() {
             price="₦0"
             features={FREE_FEATURES}
             buttonText={getButtonText('free')}
-            isCurrentPlan={true}
+            isCurrentPlan={isCurrentPlan('free')}
             onSubscribe={() => {}}
             isLoading={false}
           />
@@ -549,6 +610,11 @@ export default function PricingPage() {
             price="₦2,000"
             billingPeriod="month"
             features={PREMIUM_MONTHLY_FEATURES}
+            additionalFeatures={
+              planIncludesVerificationNotice('premium_monthly')
+                ? [{ name: 'Verification', value: 'Restore verification in Settings to use premium features' }]
+                : undefined
+            }
             buttonText={getButtonText('premium_monthly')}
             isCurrentPlan={isCurrentPlan('premium_monthly')}
             onSubscribe={() => handleSubscribe('premium_monthly', currentPlan === 'free')}
@@ -559,7 +625,12 @@ export default function PricingPage() {
             price="₦20,000"
             billingPeriod="year"
             features={PREMIUM_ANNUAL_FEATURES}
-            additionalFeatures={ANNUAL_ADDITIONAL}
+            additionalFeatures={[
+              ...ANNUAL_ADDITIONAL,
+              ...(planIncludesVerificationNotice('premium_annual')
+                ? [{ name: 'Verification', value: 'Restore verification in Settings to use premium features' }]
+                : []),
+            ]}
             buttonText={getButtonText('premium_annual')}
             isCurrentPlan={isCurrentPlan('premium_annual')}
             onSubscribe={() => handleSubscribe('premium_annual', currentPlan === 'free')}

@@ -45,6 +45,72 @@ export type ChatCompletionOptions = {
   responseSchema?: ResponseSchema;
 };
 
+function extractStudyContext(messages: ChatMessage[]): string | null {
+  for (const message of messages) {
+    if (message.role !== 'system') {
+      continue;
+    }
+
+    const match = message.content.match(
+      /<STUDY_MATERIAL_CONTEXT>\s*([\s\S]*?)\s*<\/STUDY_MATERIAL_CONTEXT>/i,
+    );
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function buildMockGroundedTutorResponse(messages: ChatMessage[]): string {
+  const latestUserMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === 'user' && message.content.trim().length > 0)?.content;
+
+  const context = extractStudyContext(messages);
+  if (!context) {
+    return getMockTutorResponse();
+  }
+
+  const contextLines = context
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const sourceLine = contextLines.find((line) => /^\[Source\s+/i.test(line)) || '[Source unknown]';
+  const evidenceLine =
+    contextLines.find((line) => !line.startsWith('[') && !line.startsWith('-') && line.length > 12) ||
+    contextLines[0] ||
+    'The uploaded material contains relevant information, but no clean excerpt was available.';
+
+  return [
+    latestUserMessage
+      ? `You asked: "${latestUserMessage}". Based on your uploaded material, here is a grounded answer:`
+      : 'Based on your uploaded material, here is a grounded answer:',
+    '',
+    evidenceLine.slice(0, 420),
+    '',
+    `Reference: ${sourceLine}`,
+  ].join('\n');
+}
+
+function getMockCompletion(messages: ChatMessage[], options?: ChatCompletionOptions): string {
+  const mockType = options?.mockType;
+  switch (mockType) {
+    case 'flashcards':
+      return getMockFlashcards(options?.maxTokens ?? 10);
+    case 'quiz':
+      return getMockQuizQuestions(options?.maxTokens ?? 10);
+    case 'summary':
+      return getMockSummary();
+    case 'study_plan':
+      return getMockStudyPlan();
+    case 'tutor':
+      return buildMockGroundedTutorResponse(messages);
+    default:
+      return getMockTutorResponse();
+  }
+}
+
 function convertMessagesForGemini(messages: ChatMessage[]): {
   systemInstruction?: string;
   contents: GeminiChatContent[];
@@ -73,21 +139,7 @@ export async function getChatCompletion(
   options?: ChatCompletionOptions,
 ): Promise<string> {
   if (MOCK_MODE_ENABLED) {
-    const mockType = options?.mockType;
-    switch (mockType) {
-      case 'flashcards':
-        return getMockFlashcards(options?.maxTokens ?? 10);
-      case 'quiz':
-        return getMockQuizQuestions(options?.maxTokens ?? 10);
-      case 'summary':
-        return getMockSummary();
-      case 'study_plan':
-        return getMockStudyPlan();
-      case 'tutor':
-        return getMockTutorResponse();
-      default:
-        return getMockTutorResponse();
-    }
+    return getMockCompletion(messages, options);
   }
 
   if (!geminiClient) {
@@ -122,7 +174,7 @@ export async function streamChatCompletion(
   options?: { temperature?: number; maxTokens?: number },
 ): Promise<ReadableStream<Uint8Array>> {
   if (MOCK_MODE_ENABLED) {
-    const mockText = getMockTutorResponse();
+    const mockText = getMockCompletion(messages, { ...options, mockType: 'tutor' });
     const encoder = new TextEncoder();
     return new ReadableStream<Uint8Array>({
       start(controller) {

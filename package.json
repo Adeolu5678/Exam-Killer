@@ -14,6 +14,11 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "phase7:validate:webhook-preview": "node scripts/phase7-validate-webhook-preview.js",
+    "phase7:validate:signed-file": "node scripts/phase7-validate-signed-file.js",
+    "phase7:validate:core-loop": "node scripts/phase7-e2e-core-loop.js",
+    "phase7:migration:audit": "node scripts/rebuild-migration-audit.js",
+    "phase7:backup:rollback": "node scripts/rebuild-backup-rollback.js",
     "deploy": "vercel --prod",
     "deploy:preview": "vercel",
     "prepare": "husky"
@@ -76,6 +81,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.4",
+    "@rolldown/binding-linux-x64-gnu": "^1.0.0-rc.12",
     "@types/gm": "^1.25.4",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",

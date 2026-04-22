@@ -64,6 +64,7 @@ export const PERSONALITY_THEMES: Record<TutorPersonalityId, PersonalityTheme> = 
 
 export interface ChatMessage {
   id: string;
+  threadId?: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
@@ -77,4 +78,12 @@ export interface CitationChip {
   label: string;
   filename: string;
   page?: number;
+}
+
+export interface TutorThread {
+  id: string;
+  workspaceId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
 }

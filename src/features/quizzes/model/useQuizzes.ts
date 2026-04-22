@@ -10,7 +10,14 @@ import { toast } from 'sonner';
 
 import { quizKeys } from './types';
 import type { GenerateQuizPayload, QuizSubmission } from './types';
-import { fetchQuizzes, fetchQuiz, generateQuiz, submitQuiz, deleteQuiz } from '../api/quizzesApi';
+import {
+  fetchQuizzes,
+  fetchQuiz,
+  fetchQuizAttemptHistory,
+  generateQuiz,
+  submitQuiz,
+  deleteQuiz,
+} from '../api/quizzesApi';
 
 // ---------------------------------------------------------------------------
 // Read hooks
@@ -33,6 +40,16 @@ export function useQuiz(quizId: string | null) {
     queryFn: () => fetchQuiz(quizId!),
     enabled: Boolean(quizId),
     staleTime: 5 * 60_000, // 5 min — quiz content rarely changes
+  });
+}
+
+/** Fetch recent quiz attempts in a workspace (review history) */
+export function useQuizAttemptHistory(workspaceId: string, limit: number = 20) {
+  return useQuery({
+    queryKey: [...quizKeys.attempts(workspaceId), limit] as const,
+    queryFn: () => fetchQuizAttemptHistory(workspaceId, limit),
+    enabled: Boolean(workspaceId),
+    staleTime: 30_000,
   });
 }
 
@@ -68,9 +85,14 @@ export function useGenerateQuiz(workspaceId: string) {
 
 /** Submit answers and receive scored results */
 export function useSubmitQuiz() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ quizId, submission }: { quizId: string; submission: QuizSubmission }) =>
       submitQuiz(quizId, submission),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: quizKeys.all });
+      void qc.invalidateQueries({ queryKey: ['analytics'] });
+    },
   });
 }
 

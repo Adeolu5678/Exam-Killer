@@ -43,6 +43,37 @@ export interface ExamDate {
   updatedAt: string;
 }
 
+export type StudyPlanStatus = 'active' | 'paused' | 'completed';
+export type StudyPlanActivityType = 'flashcard' | 'quiz' | 'practice' | 'review' | 'tutor';
+
+export interface GeneratedStudyPlanItem {
+  date: string; // YYYY-MM-DD
+  topic: string;
+  duration_minutes: number;
+  activity_type: StudyPlanActivityType;
+  completed: boolean;
+}
+
+export interface GeneratedStudyPlan {
+  id: string;
+  workspaceId: string;
+  title: string;
+  examDate: string;
+  dailyStudyHours: number;
+  focusTopics: string[];
+  status: StudyPlanStatus;
+  generatedSchedule: GeneratedStudyPlanItem[];
+  progress: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceStudyPlanBundle {
+  sessions: StudySession[];
+  exams: ExamDate[];
+  plans: GeneratedStudyPlan[];
+}
+
 // ---------------------------------------------------------------------------
 // Computed / Derived Types
 // ---------------------------------------------------------------------------
@@ -96,26 +127,59 @@ export const createExamDateSchema = z.object({
   isPrimary: z.boolean().default(false),
 });
 
-export type CreateStudySessionPayload = z.infer<typeof createStudySessionSchema>;
-export type UpdateStudySessionPayload = Partial<CreateStudySessionPayload> & {
-  status?: SessionStatus;
-};
+export const generateStudyPlanSchema = z.object({
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  dailyStudyHours: z.number().min(0.5).max(12),
+  focusTopics: z.array(z.string().min(1)).max(24).optional(),
+  maxDays: z.number().int().min(1).max(60).optional(),
+  title: z.string().min(1).max(140).optional(),
+});
+
+export const updateGeneratedStudyPlanSchema = z.object({
+  title: z.string().min(1).max(140).optional(),
+  status: z.enum(['active', 'paused', 'completed']).optional(),
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dailyStudyHours: z.number().min(0.5).max(12).optional(),
+  focusTopics: z.array(z.string().min(1)).max(24).optional(),
+  generatedSchedule: z
+    .array(
+      z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        topic: z.string().min(1),
+        duration_minutes: z.number().int().min(5).max(12 * 60),
+        activity_type: z.enum(['flashcard', 'quiz', 'practice', 'review', 'tutor']),
+        completed: z.boolean(),
+      }),
+    )
+    .optional(),
+});
+
+  export type CreateStudySessionPayload = z.infer<typeof createStudySessionSchema>;
+  export type UpdateStudySessionPayload = Partial<CreateStudySessionPayload> & {
+    status?: SessionStatus;
+  };
 export type CreateExamDatePayload = z.infer<typeof createExamDateSchema>;
-export type UpdateExamDatePayload = Partial<CreateExamDatePayload>;
+  export type UpdateExamDatePayload = Partial<CreateExamDatePayload>;
+export type GenerateStudyPlanPayload = z.infer<typeof generateStudyPlanSchema>;
+export type UpdateGeneratedStudyPlanPayload = z.infer<typeof updateGeneratedStudyPlanSchema>;
 
 // ---------------------------------------------------------------------------
 // TanStack Query Key Factory
 // ---------------------------------------------------------------------------
 
-export const studyPlanKeys = {
-  all: (workspaceId: string) => ['study-plan', workspaceId] as const,
-  sessions: (workspaceId: string) => [...studyPlanKeys.all(workspaceId), 'sessions'] as const,
-  session: (workspaceId: string, sessionId: string) =>
-    [...studyPlanKeys.sessions(workspaceId), sessionId] as const,
-  exams: (workspaceId: string) => [...studyPlanKeys.all(workspaceId), 'exams'] as const,
-  exam: (workspaceId: string, examId: string) =>
-    [...studyPlanKeys.exams(workspaceId), examId] as const,
-};
+  export const studyPlanKeys = {
+    all: (workspaceId: string) => ['study-plan', workspaceId] as const,
+    bundle: (workspaceId: string) => [...studyPlanKeys.all(workspaceId), 'bundle'] as const,
+    sessions: (workspaceId: string) => [...studyPlanKeys.all(workspaceId), 'sessions'] as const,
+    session: (workspaceId: string, sessionId: string) =>
+      [...studyPlanKeys.sessions(workspaceId), sessionId] as const,
+    exams: (workspaceId: string) => [...studyPlanKeys.all(workspaceId), 'exams'] as const,
+    exam: (workspaceId: string, examId: string) =>
+      [...studyPlanKeys.exams(workspaceId), examId] as const,
+    plans: (workspaceId: string) => [...studyPlanKeys.all(workspaceId), 'plans'] as const,
+    plan: (workspaceId: string, planId: string) =>
+      [...studyPlanKeys.plans(workspaceId), planId] as const,
+  };
 
 // ---------------------------------------------------------------------------
 // Category Config

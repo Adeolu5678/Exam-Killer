@@ -14,9 +14,15 @@ import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 
 import { useTutorStore } from './tutorStore';
-import type { ChatMessage, CitationChip } from './types';
+import type { ChatMessage, CitationChip, TutorThread } from './types';
 import type { TutorPersonalityId } from './types';
-import { sendMessageStream, fetchConversationHistory } from '../api/tutorApi';
+import {
+  sendMessageStream,
+  fetchTutorThreads,
+  fetchThreadMessages,
+  createTutorThread,
+  type TutorStreamEvent,
+} from '../api/tutorApi';
 
 // ---------------------------------------------------------------------------
 // useConversation — manages the local message array
@@ -24,19 +30,70 @@ import { sendMessageStream, fetchConversationHistory } from '../api/tutorApi';
 
 export function useConversation(workspaceId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [threads, setThreads] = useState<TutorThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const upsertThread = useCallback(
+    (thread: TutorThread) => {
+      setThreads((prev) => [thread, ...prev.filter((item) => item.id !== thread.id)]);
+    },
+    [setThreads],
+  );
+
+  const setActiveThreadFromEvent = useCallback(
+    (thread: { id: string; title: string }) => {
+      const now = new Date().toISOString();
+      setActiveThreadId(thread.id);
+      upsertThread({
+        id: thread.id,
+        workspaceId,
+        title: thread.title,
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+    [upsertThread, workspaceId],
+  );
+
+  const loadThreadMessages = useCallback(
+    async (threadId: string) => {
+      const { thread, messages: threadMessages } = await fetchThreadMessages(threadId);
+      setActiveThreadId(thread.id);
+      upsertThread(thread);
+      setMessages(threadMessages);
+    },
+    [upsertThread],
+  );
 
   const loadHistory = useCallback(async () => {
     setIsLoadingHistory(true);
     try {
-      const { messages: history } = await fetchConversationHistory(workspaceId);
-      setMessages(history);
+      const { threads: availableThreads } = await fetchTutorThreads(workspaceId);
+      setThreads(availableThreads);
+
+      if (availableThreads.length === 0) {
+        setActiveThreadId(null);
+        setMessages([]);
+        return;
+      }
+
+      await loadThreadMessages(availableThreads[0].id);
     } catch {
-      // Silently fail — backend may not persist history yet
+      setActiveThreadId(null);
+      setMessages([]);
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [workspaceId]);
+  }, [loadThreadMessages, workspaceId]);
+
+  const startNewThread = useCallback(async () => {
+    const { thread } = await createTutorThread(workspaceId);
+    upsertThread(thread);
+    setActiveThreadId(thread.id);
+    setMessages([]);
+    return thread.id;
+  }, [upsertThread, workspaceId]);
 
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
@@ -50,7 +107,19 @@ export function useConversation(workspaceId: string) {
     setMessages((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
-  return { messages, isLoadingHistory, loadHistory, appendMessage, updateMessage, removeMessage };
+  return {
+    messages,
+    threads,
+    activeThreadId,
+    isLoadingHistory,
+    loadHistory,
+    loadThreadMessages,
+    startNewThread,
+    setActiveThreadFromEvent,
+    appendMessage,
+    updateMessage,
+    removeMessage,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -59,13 +128,15 @@ export function useConversation(workspaceId: string) {
 
 export function useSendMessage({
   workspaceId,
-  messages,
+  activeThreadId,
+  setActiveThreadFromEvent,
   appendMessage,
   updateMessage,
   removeMessage,
 }: {
   workspaceId: string;
-  messages: ChatMessage[];
+  activeThreadId: string | null;
+  setActiveThreadFromEvent: (thread: { id: string; title: string }) => void;
   appendMessage: (msg: ChatMessage) => void;
   updateMessage: (id: string, patch: Partial<ChatMessage>) => void;
   removeMessage: (id: string) => void;
@@ -86,6 +157,7 @@ export function useSendMessage({
       const userMsgId = nanoid();
       appendMessage({
         id: userMsgId,
+        threadId: activeThreadId ?? undefined,
         role: 'user',
         content: text,
         createdAt: new Date().toISOString(),
@@ -96,6 +168,7 @@ export function useSendMessage({
       const assistantMsgId = nanoid();
       appendMessage({
         id: assistantMsgId,
+        threadId: activeThreadId ?? undefined,
         role: 'assistant',
         content: '',
         createdAt: new Date().toISOString(),
@@ -110,54 +183,80 @@ export function useSendMessage({
         // 4. Default OpenAI Streaming path
         const stream = await sendMessageStream({
           workspaceId,
+          threadId: activeThreadId,
           message: text,
           personalityId: personality,
-          history: messages.map((message) => ({
-            role: message.role,
-            content: message.content,
-          })),
-          stream: true,
         });
 
         const reader = stream.getReader();
         const decoder = new TextDecoder();
-        let rawResponse = '';
+        let streamBuffer = '';
+        let assembledContent = '';
         let finalCitations: CitationChip[] = [];
+        let resolvedThreadId = activeThreadId ?? undefined;
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            break;
+          }
 
-          const chunk = decoder.decode(value, { stream: true });
-          rawResponse += chunk;
+          streamBuffer += decoder.decode(value, { stream: true });
+          const lines = streamBuffer.split('\n');
+          streamBuffer = lines.pop() || '';
 
-          const markerIndex = rawResponse.indexOf('[CITATIONS]:');
-          const visibleContent =
-            markerIndex === -1 ? rawResponse : rawResponse.slice(0, markerIndex);
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+              continue;
+            }
 
-          updateMessage(assistantMsgId, {
-            content: visibleContent,
-            isStreaming: true,
-          });
-        }
+            let event: TutorStreamEvent | null = null;
+            try {
+              event = JSON.parse(trimmed) as TutorStreamEvent;
+            } catch {
+              continue;
+            }
 
-        const markerIndex = rawResponse.indexOf('[CITATIONS]:');
-        let accumulatedContent = rawResponse;
+            if (event.type === 'thread') {
+              resolvedThreadId = event.thread.id;
+              setActiveThreadFromEvent(event.thread);
+              updateMessage(userMsgId, { threadId: resolvedThreadId });
+              updateMessage(assistantMsgId, { threadId: resolvedThreadId });
+              continue;
+            }
 
-        if (markerIndex !== -1) {
-          accumulatedContent = rawResponse.slice(0, markerIndex);
-          const rawCitations = rawResponse.slice(markerIndex + '[CITATIONS]:'.length);
+            if (event.type === 'token') {
+              assembledContent += event.delta;
+              updateMessage(assistantMsgId, {
+                threadId: resolvedThreadId,
+                content: assembledContent,
+                isStreaming: true,
+              });
+              continue;
+            }
 
-          try {
-            finalCitations = JSON.parse(atob(rawCitations)) as CitationChip[];
-          } catch {
-            finalCitations = [];
+            if (event.type === 'done') {
+              resolvedThreadId = event.thread_id;
+              finalCitations = event.citations.map((citation) => ({
+                sourceId: citation.source_id,
+                filename: citation.file_name,
+                label: citation.label,
+                page: typeof citation.page_number === 'number' ? citation.page_number : undefined,
+              }));
+              continue;
+            }
+
+            if (event.type === 'error') {
+              throw new Error(event.message);
+            }
           }
         }
 
         // Finalize the message
         updateMessage(assistantMsgId, {
-          content: accumulatedContent,
+          threadId: resolvedThreadId,
+          content: assembledContent,
           citations: finalCitations.length > 0 ? finalCitations : undefined,
           isStreaming: false,
         });
@@ -176,10 +275,11 @@ export function useSendMessage({
       inputValue,
       selectedPersonality,
       workspaceId,
-      messages,
+      activeThreadId,
       appendMessage,
       updateMessage,
       removeMessage,
+      setActiveThreadFromEvent,
       setInputValue,
       setIsStreaming,
       setStreamingMessageId,

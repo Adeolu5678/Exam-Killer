@@ -8,10 +8,6 @@ import { SourcesListResponse, UploadSourceResponse } from '@/shared/types/api';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
   'text/plain', // allow plain text uploads
 ];
 
@@ -19,9 +15,8 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // Increased to match frontend (50MB)
 
 // Native UUID generation is preferred
 
-function getSourceType(mimeType: string): 'pdf' | 'image' | 'text' {
+function getSourceType(mimeType: string): 'pdf' | 'text' {
   if (mimeType === 'application/pdf') return 'pdf';
-  if (mimeType.startsWith('image/')) return 'image';
   return 'text';
 }
 
@@ -164,7 +159,7 @@ export const POST = withAuth(async (request, { db, userId }) => {
 
   if (!ALLOWED_MIME_TYPES.includes(file.type)) {
     return errorResponse(
-      'Invalid file type. Allowed: PDF, JPEG, PNG, GIF, WebP',
+      'Invalid file type. Allowed: PDF and plain text',
       StatusCodes.BAD_REQUEST,
     );
   }

@@ -69,6 +69,17 @@ export interface QuizResultData {
   xp_earned: number;
 }
 
+export interface QuizAttemptHistoryItem {
+  attempt_id: string;
+  quiz_id: string;
+  quiz_title: string;
+  score: number;
+  correct_count: number;
+  total_questions: number;
+  time_spent_seconds: number;
+  submitted_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Zod schemas
 // ---------------------------------------------------------------------------
@@ -122,4 +133,5 @@ export const quizKeys = {
   all: ['quizzes'] as const,
   list: (workspaceId: string) => [...quizKeys.all, 'list', workspaceId] as const,
   detail: (quizId: string) => [...quizKeys.all, 'detail', quizId] as const,
+  attempts: (workspaceId: string) => [...quizKeys.all, 'attempts', workspaceId] as const,
 };

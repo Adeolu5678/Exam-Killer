@@ -2,41 +2,31 @@
 
 import { useContext } from 'react';
 
-import type { AuthError, User } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 
 import { AuthContext } from '@/context/AuthContext';
+import type { RegisterInput, SubscriptionInfo, UsageInfo } from '@/context/AuthContext';
+import type { ViewerProfile } from '@/domains/users/contracts/viewer';
 
 interface UseAuthReturn {
   user: User | null;
+  viewer: ViewerProfile | null;
+  sessionStatus: 'authenticated' | 'anonymous';
+  sessionExpiresAt: string | null;
   loading: boolean;
-  error: AuthError | null;
+  error: Error | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
+  register: (input: RegisterInput) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
-  subscription: {
-    plan: 'free' | 'premium_monthly' | 'premium_annual';
-    status: 'active' | 'inactive' | 'past_due';
-    currentPeriodEnd?: Date | string;
-    isTrial?: boolean;
-    hasHadTrial?: boolean;
-    paystackAuthorizationCode?: string;
-    matricNumber?: string;
-    institution?: string;
-    verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
-    verificationMediaUrl?: string;
-    verificationSubmittedAt?: Date;
-  } | null;
-  usage: {
-    workspacesCount: number;
-    fileUploadsThisMonth: number;
-    aiQueriesToday: number;
-    flashcardsCount: number;
-  } | null;
+  subscription: SubscriptionInfo | null;
+  usage: UsageInfo | null;
   canUseFeature: (feature: string) => boolean;
   isLoadingSubscription: boolean;
   isAuthenticated: boolean;
+  refreshSession: () => Promise<void>;
 }
 
 export function useAuth(): UseAuthReturn {
@@ -46,12 +36,5 @@ export function useAuth(): UseAuthReturn {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 
-  const { user, loading, ...rest } = context;
-
-  return {
-    ...rest,
-    user,
-    loading,
-    isAuthenticated: !!user && !loading,
-  };
+  return context;
 }

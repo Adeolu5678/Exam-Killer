@@ -6,12 +6,12 @@
 // FSD: imports ONLY from @/shared/ui and @/features/workspace (public APIs)
 // =============================================================================
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { motion } from 'framer-motion';
-import { CalendarCheck2, BookOpen, CheckCircle2, Timer, PlusCircle } from 'lucide-react';
+import { CalendarCheck2, BookOpen, CheckCircle2, Timer, PlusCircle, Sparkles } from 'lucide-react';
 
-import { Badge, Card, CardContent } from '@/shared/ui';
+import { Badge, Card, CardContent, Input } from '@/shared/ui';
 
 import { useWorkspace } from '@/features/workspace';
 
@@ -28,8 +28,17 @@ import {
   formatTime,
   SESSION_CATEGORY_CONFIG,
   formatDateStr,
+  type GenerateStudyPlanPayload,
 } from '../model/types';
-import { useStudySessions, useExamDates, useCompleteStudySession } from '../model/useStudyPlan';
+import {
+  useStudySessions,
+  useStudyPlans,
+  useExamDates,
+  useCompleteStudySession,
+  useGenerateStudyPlan,
+  useUpdateGeneratedStudyPlan,
+  useCompleteStudyPlanItem,
+} from '../model/useStudyPlan';
 
 // ---------------------------------------------------------------------------
 // Stat pill (mini card for weekly stats)
@@ -69,7 +78,7 @@ interface TodaysSessionsProps {
   workspaceId: string;
 }
 
-function TodaysSessions({ workspaceId }: TodaysSessionsProps) {
+  function TodaysSessions({ workspaceId }: TodaysSessionsProps) {
   const { data: sessions = [], isLoading } = useStudySessions(workspaceId);
   const complete = useCompleteStudySession(workspaceId);
   const today = formatDateStr(new Date());
@@ -134,6 +143,176 @@ function TodaysSessions({ workspaceId }: TodaysSessionsProps) {
       )}
     </div>
   );
+  }
+
+interface GeneratedStudyPlansPanelProps {
+  workspaceId: string;
+  defaultExamDate?: string;
+}
+
+function GeneratedStudyPlansPanel({ workspaceId, defaultExamDate }: GeneratedStudyPlansPanelProps) {
+  const { data: plans = [], isLoading } = useStudyPlans(workspaceId);
+  const generatePlan = useGenerateStudyPlan(workspaceId);
+  const updatePlan = useUpdateGeneratedStudyPlan(workspaceId);
+  const completePlanItem = useCompleteStudyPlanItem(workspaceId);
+  const [form, setForm] = useState({
+    title: '',
+    examDate: defaultExamDate ?? '',
+    dailyStudyHours: '2',
+    focusTopics: '',
+  });
+
+  function parseTopics(raw: string): string[] {
+    return raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, 24);
+  }
+
+  function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    const examDate = form.examDate || defaultExamDate || '';
+    const payload: GenerateStudyPlanPayload = {
+      title: form.title.trim() || undefined,
+      examDate,
+      dailyStudyHours: Number(form.dailyStudyHours),
+      focusTopics: parseTopics(form.focusTopics),
+    };
+
+    generatePlan.mutate(payload, {
+      onSuccess: () => {
+        setForm((prev) => ({ ...prev, title: '', focusTopics: '' }));
+      },
+    });
+  }
+
+  return (
+    <Card className={styles.generatedPlansCard}>
+      <CardContent className={styles.generatedPlansContent}>
+        <div className={styles.generatedPlansHeader}>
+          <div className={styles.generatedPlansTitleWrap}>
+            <div className={styles.generatedPlansIcon} aria-hidden>
+              <Sparkles size={16} />
+            </div>
+            <div>
+              <h2 className={styles.generatedPlansTitle}>AI Study Plans</h2>
+              <p className={styles.generatedPlansSubtitle}>
+                Generate and edit adaptive plans based on your exam timeline.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <form className={styles.generatedPlanForm} onSubmit={handleGenerate}>
+          <div className={styles.generatedPlanFormGrid}>
+            <Input
+              label="Plan title (optional)"
+              value={form.title}
+              onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="e.g. Midterm Sprint Plan"
+            />
+              <Input
+                label="Exam date"
+                type="date"
+                value={form.examDate || defaultExamDate || ''}
+                onChange={(event) => setForm((prev) => ({ ...prev, examDate: event.target.value }))}
+                required
+              />
+            <Input
+              label="Daily study hours"
+              type="number"
+              min={0.5}
+              max={12}
+              step={0.5}
+              value={form.dailyStudyHours}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, dailyStudyHours: event.target.value }))
+              }
+              required
+            />
+          </div>
+          <Input
+            label="Focus topics (comma-separated)"
+            value={form.focusTopics}
+            onChange={(event) => setForm((prev) => ({ ...prev, focusTopics: event.target.value }))}
+            placeholder="Derivatives, Thermodynamics, Organic chemistry"
+          />
+            <button
+              type="submit"
+              className={styles.actionBtnPrimary}
+              disabled={generatePlan.isPending || !(form.examDate || defaultExamDate)}
+            >
+            <Sparkles size={14} />
+            {generatePlan.isPending ? 'Generating...' : 'Generate plan'}
+          </button>
+        </form>
+
+        {isLoading ? (
+          <p className={styles.generatedPlansHint}>Loading generated plans...</p>
+        ) : plans.length === 0 ? (
+          <p className={styles.generatedPlansHint}>
+            No generated plans yet. Create one to start guided daily study tasks.
+          </p>
+        ) : (
+          <div className={styles.generatedPlanList}>
+            {plans.map((plan) => (
+              <article key={plan.id} className={styles.generatedPlanItem}>
+                <header className={styles.generatedPlanItemHeader}>
+                  <div>
+                    <h3 className={styles.generatedPlanItemTitle}>{plan.title}</h3>
+                    <p className={styles.generatedPlanItemMeta}>
+                      Exam: {plan.examDate} · {plan.dailyStudyHours}h/day
+                    </p>
+                  </div>
+                  <div className={styles.generatedPlanActions}>
+                    <Badge>{plan.progress}% complete</Badge>
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() =>
+                        updatePlan.mutate({
+                          planId: plan.id,
+                          payload: { status: plan.status === 'active' ? 'paused' : 'active' },
+                        })
+                      }
+                      disabled={updatePlan.isPending}
+                    >
+                      {plan.status === 'active' ? 'Pause' : 'Activate'}
+                    </button>
+                  </div>
+                </header>
+                <ul className={styles.generatedPlanSchedule}>
+                  {plan.generatedSchedule.map((item, index) => (
+                    <li key={`${plan.id}-${item.date}-${index}`} className={styles.generatedPlanScheduleItem}>
+                      <label className={styles.generatedPlanScheduleLabel}>
+                        <input
+                          type="checkbox"
+                          checked={item.completed}
+                          onChange={(event) =>
+                            completePlanItem.mutate({
+                              planId: plan.id,
+                              itemIndex: index,
+                              completed: event.target.checked,
+                            })
+                          }
+                          disabled={completePlanItem.isPending}
+                        />
+                        <span>
+                          {item.date} · {item.topic} · {Math.round(item.duration_minutes)}m
+                        </span>
+                      </label>
+                      <Badge>{item.activity_type}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,17 +323,24 @@ interface StudyPlanPageShellProps {
   workspaceId: string;
 }
 
-export function StudyPlanPageShell({ workspaceId }: StudyPlanPageShellProps) {
+  export function StudyPlanPageShell({ workspaceId }: StudyPlanPageShellProps) {
   const { data: workspaceResponse } = useWorkspace(workspaceId);
   const workspace = workspaceResponse?.workspace;
   const { data: sessions = [], isLoading: loadingSessions } = useStudySessions(workspaceId);
   const { data: exams = [], isLoading: loadingExams } = useExamDates(workspaceId);
   const { openSessionCreator, openExamCreator, setActiveSession } = useStudyPlanStore();
 
-  const weekStats = useMemo(() => {
-    const stats = computeWeekStats(sessions);
-    return { ...stats, upcomingExamCount: exams.filter((e) => !computeCountdown(e).isPast).length };
-  }, [sessions, exams]);
+    const weekStats = useMemo(() => {
+      const stats = computeWeekStats(sessions);
+      return { ...stats, upcomingExamCount: exams.filter((e) => !computeCountdown(e).isPast).length };
+    }, [sessions, exams]);
+
+    const nearestUpcomingExamDate = useMemo(() => {
+      const upcoming = exams
+        .filter((exam) => !computeCountdown(exam).isPast)
+        .sort((a, b) => a.examDate.localeCompare(b.examDate));
+      return upcoming[0]?.examDate;
+    }, [exams]);
 
   return (
     <div className={styles.root}>
@@ -184,7 +370,7 @@ export function StudyPlanPageShell({ workspaceId }: StudyPlanPageShellProps) {
       </div>
 
       {/* Weekly stats row */}
-      <div className={styles.statsRow}>
+        <div className={styles.statsRow}>
         <StatPill
           icon={<BookOpen size={14} />}
           label="Sessions this week"
@@ -213,9 +399,14 @@ export function StudyPlanPageShell({ workspaceId }: StudyPlanPageShellProps) {
           variant={weekStats.upcomingExamCount > 0 ? 'amber' : 'default'}
           delay={0.18}
         />
-      </div>
+        </div>
 
-      {/* Main two-column grid */}
+        <GeneratedStudyPlansPanel
+          workspaceId={workspaceId}
+          defaultExamDate={nearestUpcomingExamDate}
+        />
+
+        {/* Main two-column grid */}
       <div className={styles.mainGrid}>
         {/* Calendar — primary column */}
         <PlannerCalendar

@@ -6,19 +6,30 @@
 
 import type { AggregatedStats, ProgressDataPoint, StreakDay } from '../model/types';
 
+interface ApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message?: string;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared fetch helper (mirrors pattern across all feature api layers)
 // ---------------------------------------------------------------------------
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     ...options,
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { message?: string }).message ?? `API Error: ${res.status}`);
+
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+  if (!res.ok || !body || !body.success || body.data === undefined) {
+    throw new Error(body?.error?.message ?? `API Error: ${res.status}`);
   }
-  return res.json() as Promise<T>;
+
+  return body.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -27,8 +38,8 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
 export async function fetchAggregatedStats(workspaceId: string): Promise<AggregatedStats> {
   const url =
     workspaceId === 'global'
-      ? '/api/analytics/global/stats'
-      : `/api/analytics/workspace/${workspaceId}/stats`;
+      ? '/api/v1/analytics/global/stats'
+      : `/api/v1/workspaces/${workspaceId}/analytics/stats`;
   return apiFetch<AggregatedStats>(url);
 }
 
@@ -41,8 +52,8 @@ export async function fetchProgressData(
 ): Promise<ProgressDataPoint[]> {
   const url =
     workspaceId === 'global'
-      ? `/api/analytics/global/progress?days=${days}`
-      : `/api/analytics/workspace/${workspaceId}/progress?days=${days}`;
+      ? `/api/v1/analytics/global/progress?days=${days}`
+      : `/api/v1/workspaces/${workspaceId}/analytics/progress?days=${days}`;
   return apiFetch<ProgressDataPoint[]>(url);
 }
 
@@ -52,7 +63,7 @@ export async function fetchProgressData(
 export async function fetchStreakData(workspaceId: string): Promise<StreakDay[]> {
   const url =
     workspaceId === 'global'
-      ? '/api/analytics/global/streak'
-      : `/api/analytics/workspace/${workspaceId}/streak`;
+      ? '/api/v1/analytics/global/streak'
+      : `/api/v1/workspaces/${workspaceId}/analytics/streak`;
   return apiFetch<StreakDay[]>(url);
 }

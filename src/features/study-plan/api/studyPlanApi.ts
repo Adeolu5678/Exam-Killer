@@ -7,11 +7,24 @@
 import type {
   StudySession,
   ExamDate,
+  GeneratedStudyPlan,
+  WorkspaceStudyPlanBundle,
   CreateStudySessionPayload,
   UpdateStudySessionPayload,
   CreateExamDatePayload,
   UpdateExamDatePayload,
+  GenerateStudyPlanPayload,
+  UpdateGeneratedStudyPlanPayload,
 } from '../model/types';
+
+interface ApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message?: string;
+    details?: Record<string, unknown>;
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Shared fetch helper
@@ -19,21 +32,39 @@ import type {
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     ...options,
   });
 
-  if (!res.ok) {
-    let message = `API error ${res.status}`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // ignore parse errors
-    }
-    throw new Error(message);
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+  if (!res.ok || !body || !body.success || body.data === undefined) {
+    throw new Error(body?.error?.message || `API error ${res.status}`);
   }
 
-  return res.json() as Promise<T>;
+  return body.data;
+}
+
+function toStudyPlanApiPayload(payload: GenerateStudyPlanPayload): Record<string, unknown> {
+  return {
+    exam_date: payload.examDate,
+    daily_study_hours: payload.dailyStudyHours,
+    focus_topics: payload.focusTopics ?? [],
+    max_days: payload.maxDays,
+    title: payload.title,
+  };
+}
+
+function toStudyPlanUpdatePayload(
+  payload: UpdateGeneratedStudyPlanPayload,
+): Record<string, unknown> {
+  return {
+    title: payload.title,
+    status: payload.status,
+    exam_date: payload.examDate,
+    daily_study_hours: payload.dailyStudyHours,
+    focus_topics: payload.focusTopics,
+    generated_schedule: payload.generatedSchedule,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +73,7 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
 
 /** Fetch all study sessions for a workspace. */
 export async function fetchStudySessions(workspaceId: string): Promise<StudySession[]> {
-  return apiFetch<StudySession[]>(`/api/workspaces/${workspaceId}/study-plan/sessions`);
+  return apiFetch<StudySession[]>(`/api/v1/workspaces/${workspaceId}/study-plan/sessions`);
 }
 
 /** Fetch a single study session by ID. */
@@ -50,7 +81,18 @@ export async function fetchStudySession(
   workspaceId: string,
   sessionId: string,
 ): Promise<StudySession> {
-  return apiFetch<StudySession>(`/api/workspaces/${workspaceId}/study-plan/sessions/${sessionId}`);
+  return apiFetch<StudySession>(`/api/v1/workspaces/${workspaceId}/study-plan/sessions/${sessionId}`);
+}
+
+/** Fetch study-plan aggregate bundle for a workspace. */
+export async function fetchStudyPlanBundle(workspaceId: string): Promise<WorkspaceStudyPlanBundle> {
+  return apiFetch<WorkspaceStudyPlanBundle>(`/api/v1/workspaces/${workspaceId}/study-plan`);
+}
+
+/** Fetch generated study plans for a workspace. */
+export async function fetchStudyPlans(workspaceId: string): Promise<GeneratedStudyPlan[]> {
+  const bundle = await fetchStudyPlanBundle(workspaceId);
+  return bundle.plans ?? [];
 }
 
 /** Create a new study session block. */
@@ -58,7 +100,7 @@ export async function createStudySession(
   workspaceId: string,
   payload: CreateStudySessionPayload,
 ): Promise<StudySession> {
-  return apiFetch<StudySession>(`/api/workspaces/${workspaceId}/study-plan/sessions`, {
+  return apiFetch<StudySession>(`/api/v1/workspaces/${workspaceId}/study-plan/sessions`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -70,7 +112,7 @@ export async function updateStudySession(
   sessionId: string,
   payload: UpdateStudySessionPayload,
 ): Promise<StudySession> {
-  return apiFetch<StudySession>(`/api/workspaces/${workspaceId}/study-plan/sessions/${sessionId}`, {
+  return apiFetch<StudySession>(`/api/v1/workspaces/${workspaceId}/study-plan/sessions/${sessionId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -78,9 +120,12 @@ export async function updateStudySession(
 
 /** Delete a study session. */
 export async function deleteStudySession(workspaceId: string, sessionId: string): Promise<void> {
-  await apiFetch<void>(`/api/workspaces/${workspaceId}/study-plan/sessions/${sessionId}`, {
-    method: 'DELETE',
-  });
+  await apiFetch<{ deleted: boolean }>(
+    `/api/v1/workspaces/${workspaceId}/study-plan/sessions/${sessionId}`,
+    {
+      method: 'DELETE',
+    },
+  );
 }
 
 /** Mark a study session as complete. */
@@ -89,18 +134,70 @@ export async function completeStudySession(
   sessionId: string,
 ): Promise<StudySession> {
   return apiFetch<StudySession>(
-    `/api/workspaces/${workspaceId}/study-plan/sessions/${sessionId}/complete`,
+    `/api/v1/workspaces/${workspaceId}/study-plan/sessions/${sessionId}/complete`,
     { method: 'POST' },
   );
-}
+  }
 
-// ---------------------------------------------------------------------------
-// Exam Dates
-// ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Generated Study Plans
+  // ---------------------------------------------------------------------------
+
+  /** Generate an AI study plan for a workspace. */
+  export async function generateWorkspaceStudyPlan(
+    workspaceId: string,
+    payload: GenerateStudyPlanPayload,
+  ): Promise<GeneratedStudyPlan> {
+    const data = await apiFetch<{ plan: GeneratedStudyPlan }>(
+      `/api/v1/workspaces/${workspaceId}/study-plan/generate`,
+      {
+        method: 'POST',
+        body: JSON.stringify(toStudyPlanApiPayload(payload)),
+      },
+    );
+    return data.plan;
+  }
+
+  /** Update generated study plan metadata or schedule. */
+  export async function updateGeneratedStudyPlan(
+    workspaceId: string,
+    planId: string,
+    payload: UpdateGeneratedStudyPlanPayload,
+  ): Promise<GeneratedStudyPlan> {
+    const data = await apiFetch<{ plan: GeneratedStudyPlan }>(
+      `/api/v1/workspaces/${workspaceId}/study-plan/plans/${planId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(toStudyPlanUpdatePayload(payload)),
+      },
+    );
+    return data.plan;
+  }
+
+  /** Mark a generated study-plan item as complete/incomplete. */
+  export async function completeGeneratedStudyPlanItem(
+    workspaceId: string,
+    planId: string,
+    itemIndex: number,
+    completed: boolean,
+  ): Promise<GeneratedStudyPlan> {
+    const data = await apiFetch<{ plan: GeneratedStudyPlan }>(
+      `/api/v1/workspaces/${workspaceId}/study-plan/plans/${planId}/items/${itemIndex}/complete`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ completed }),
+      },
+    );
+    return data.plan;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Exam Dates
+  // ---------------------------------------------------------------------------
 
 /** Fetch all exam dates for a workspace. */
 export async function fetchExamDates(workspaceId: string): Promise<ExamDate[]> {
-  return apiFetch<ExamDate[]>(`/api/workspaces/${workspaceId}/study-plan/exams`);
+  return apiFetch<ExamDate[]>(`/api/v1/workspaces/${workspaceId}/study-plan/exams`);
 }
 
 /** Create a new exam date entry. */
@@ -108,7 +205,7 @@ export async function createExamDate(
   workspaceId: string,
   payload: CreateExamDatePayload,
 ): Promise<ExamDate> {
-  return apiFetch<ExamDate>(`/api/workspaces/${workspaceId}/study-plan/exams`, {
+  return apiFetch<ExamDate>(`/api/v1/workspaces/${workspaceId}/study-plan/exams`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -120,7 +217,7 @@ export async function updateExamDate(
   examId: string,
   payload: UpdateExamDatePayload,
 ): Promise<ExamDate> {
-  return apiFetch<ExamDate>(`/api/workspaces/${workspaceId}/study-plan/exams/${examId}`, {
+  return apiFetch<ExamDate>(`/api/v1/workspaces/${workspaceId}/study-plan/exams/${examId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -128,7 +225,7 @@ export async function updateExamDate(
 
 /** Delete an exam date. */
 export async function deleteExamDate(workspaceId: string, examId: string): Promise<void> {
-  await apiFetch<void>(`/api/workspaces/${workspaceId}/study-plan/exams/${examId}`, {
+  await apiFetch<{ deleted: boolean }>(`/api/v1/workspaces/${workspaceId}/study-plan/exams/${examId}`, {
     method: 'DELETE',
   });
 }

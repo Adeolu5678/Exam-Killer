@@ -26,6 +26,20 @@ interface VerificationRequest {
   verification_submitted_at?: string | { seconds: number };
 }
 
+interface ApiSuccessEnvelope<T> {
+  success: true;
+  data: T;
+}
+
+interface ApiErrorEnvelope {
+  success: false;
+  error?: {
+    message?: string;
+  };
+}
+
+type ApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiErrorEnvelope;
+
 export default function AdminVerificationsPage() {
   const [verifications, setVerifications] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,8 +57,8 @@ export default function AdminVerificationsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/verifications');
-      const data = await res.json();
+      const res = await fetch('/api/v1/verification/admin');
+      const payload = (await res.json()) as ApiEnvelope<{ verifications: VerificationRequest[] }>;
       if (res.status === 401) {
         setAccessState('unauthorized');
         throw new Error('Sign in to review verification requests.');
@@ -54,10 +68,12 @@ export default function AdminVerificationsPage() {
         throw new Error('Your account does not have admin access to this page.');
       }
       setAccessState('allowed');
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch verifications');
-      setVerifications(data.verifications);
-    } catch (err: any) {
-      setError(err.message);
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.success ? 'Failed to fetch verifications' : payload.error?.message);
+      }
+      setVerifications(payload.data.verifications);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch verifications');
     } finally {
       setLoading(false);
     }
@@ -67,12 +83,12 @@ export default function AdminVerificationsPage() {
     setActioningId(targetUserId);
     setError(null);
     try {
-      const res = await fetch('/api/admin/verifications', {
+      const res = await fetch('/api/v1/verification/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserId, status }),
+        body: JSON.stringify({ target_user_id: targetUserId, status }),
       });
-      const data = await res.json();
+      const payload = (await res.json()) as ApiEnvelope<{ reviewed: boolean }>;
       if (res.status === 401) {
         setAccessState('unauthorized');
         throw new Error('Your session expired. Sign in again to continue.');
@@ -81,12 +97,14 @@ export default function AdminVerificationsPage() {
         setAccessState('forbidden');
         throw new Error('Only admin accounts can review verification requests.');
       }
-      if (!res.ok) throw new Error(data.error || 'Action failed');
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.success ? 'Action failed' : payload.error?.message);
+      }
 
       // Remove from list
       setVerifications((prev) => prev.filter((v) => v.uid !== targetUserId));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setActioningId(null);
     }

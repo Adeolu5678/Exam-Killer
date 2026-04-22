@@ -1,120 +1,247 @@
 // =============================================================================
 // features/tutor/api/tutorApi.ts
 // Layer: features → tutor → api
-// Purpose: Typed fetch wrappers for the /api/chat/tutor endpoint.
-//          All streaming + non-streaming surface goes here.
-//          Consumers use the model hooks, not this file directly.
+// Purpose: Typed fetch wrappers for rebuild Phase 3 tutor endpoints.
 // =============================================================================
 
 import type { TutorPersonalityId } from '../model/types';
 
-// ---------------------------------------------------------------------------
-// Internal fetch helper (mirrors workspaceApi pattern)
-// ---------------------------------------------------------------------------
+interface ApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message?: string;
+  };
+}
 
 interface ApiError {
   message: string;
   status: number;
 }
 
-async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
-
-  if (!res.ok) {
-    let message = `Request failed: ${res.status}`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // ignore json parse errors
-    }
-    const err: ApiError = { message, status: res.status };
-    throw err;
-  }
-
-  return res.json() as Promise<T>;
-}
-
-// ---------------------------------------------------------------------------
-// Types for request / response shapes
-// ---------------------------------------------------------------------------
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  /** ISO timestamp */
-  createdAt: string;
-  /** Sources referenced by the AI in this message */
-  citations?: CitationChip[];
-  /** True while tokens are streaming in */
-  isStreaming?: boolean;
-}
-
 export interface CitationChip {
   sourceId: string;
   label: string;
-  /** Truncated filename, e.g. "Chapter 3.pdf" */
   filename: string;
-  /** Page or section hint if available */
   page?: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  citations?: CitationChip[];
+  isStreaming?: boolean;
+}
+
+export interface TutorThread {
+  id: string;
+  workspaceId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SendMessagePayload {
   workspaceId: string;
+  threadId?: string | null;
   message: string;
   personalityId: TutorPersonalityId;
-  /** Full conversation history for context window */
-  history: Array<{ role: 'user' | 'assistant'; content: string }>;
-  /** Whether the caller wants a streaming response */
-  stream?: boolean;
+  customInstructions?: string;
 }
 
 export interface SendMessageResponse {
-  reply: string;
-  citations?: CitationChip[];
+  thread: TutorThread;
+  assistantMessage: ChatMessage;
 }
 
-// ---------------------------------------------------------------------------
-// Non-streaming send (for simple / fallback use)
-// ---------------------------------------------------------------------------
+export type TutorStreamEvent =
+  | { type: 'thread'; thread: { id: string; title: string } }
+  | { type: 'token'; delta: string }
+  | { type: 'error'; message: string }
+  | {
+      type: 'done';
+      thread_id: string;
+      assistant_message_id: string;
+      citations: Array<{
+        source_id: string;
+        file_name: string;
+        label: string;
+        page_number: number | null;
+      }>;
+    };
+
+interface TutorThreadApi {
+  id: string;
+  workspace_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TutorMessageApi {
+  id: string;
+  thread_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+  citations?: Array<{
+    source_id: string;
+    file_name: string;
+    label: string;
+    page_number: number | null;
+  }>;
+}
+
+interface FetchThreadsResponse {
+  threads: TutorThreadApi[];
+}
+
+interface FetchMessagesResponse {
+  thread: TutorThreadApi;
+  messages: TutorMessageApi[];
+}
+
+interface NonStreamingMessageResponse {
+  thread: TutorThreadApi;
+  assistant_message: TutorMessageApi;
+}
+
+function toTutorThread(thread: TutorThreadApi): TutorThread {
+  return {
+    id: thread.id,
+    workspaceId: thread.workspace_id,
+    title: thread.title,
+    createdAt: thread.created_at,
+    updatedAt: thread.updated_at,
+  };
+}
+
+function toCitation(citation: {
+  source_id: string;
+  file_name: string;
+  label: string;
+  page_number: number | null;
+}): CitationChip {
+  return {
+    sourceId: citation.source_id,
+    filename: citation.file_name,
+    label: citation.label,
+    page: typeof citation.page_number === 'number' ? citation.page_number : undefined,
+  };
+}
+
+function toChatMessage(message: TutorMessageApi): ChatMessage {
+  return {
+    id: message.id,
+    threadId: message.thread_id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.created_at,
+    citations: message.citations?.map(toCitation),
+  };
+}
+
+async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    ...init,
+  });
+
+  let body: ApiEnvelope<T> | null = null;
+  try {
+    body = (await res.json()) as ApiEnvelope<T>;
+  } catch {
+    // keep null and throw a generic error below
+  }
+
+  if (!res.ok || !body || !body.success || body.data === undefined) {
+    const message = body?.error?.message || `Request failed: ${res.status}`;
+    throw { message, status: res.status } satisfies ApiError;
+  }
+
+  return body.data;
+}
+
+export async function fetchTutorThreads(workspaceId: string): Promise<{ threads: TutorThread[] }> {
+  const data = await apiFetch<FetchThreadsResponse>(
+    `/api/v1/workspaces/${workspaceId}/tutor/threads`,
+    { method: 'GET' },
+  );
+
+  return {
+    threads: data.threads.map(toTutorThread),
+  };
+}
+
+export async function createTutorThread(
+  workspaceId: string,
+  title?: string,
+): Promise<{ thread: TutorThread }> {
+  const data = await apiFetch<{ thread: TutorThreadApi }>(
+    `/api/v1/workspaces/${workspaceId}/tutor/threads`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    },
+  );
+
+  return {
+    thread: toTutorThread(data.thread),
+  };
+}
+
+export async function fetchThreadMessages(
+  threadId: string,
+  limit: number = 200,
+): Promise<{ thread: TutorThread; messages: ChatMessage[] }> {
+  const data = await apiFetch<FetchMessagesResponse>(
+    `/api/v1/tutor/threads/${threadId}/messages?limit=${encodeURIComponent(String(limit))}`,
+    { method: 'GET' },
+  );
+
+  return {
+    thread: toTutorThread(data.thread),
+    messages: data.messages.map(toChatMessage),
+  };
+}
 
 export async function sendMessage(payload: SendMessagePayload): Promise<SendMessageResponse> {
-  return apiFetch<SendMessageResponse>('/api/chat/tutor', {
-    method: 'POST',
-    body: JSON.stringify({
-      workspaceId: payload.workspaceId,
-      message: payload.message,
-      personality: payload.personalityId,
-      conversationHistory: payload.history,
-      stream: false,
-    }),
-  });
+  const data = await apiFetch<NonStreamingMessageResponse>(
+    `/api/v1/workspaces/${payload.workspaceId}/tutor/messages`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        thread_id: payload.threadId || undefined,
+        message: payload.message,
+        personality: payload.personalityId,
+        custom_instructions: payload.customInstructions,
+        stream: false,
+      }),
+    },
+  );
+
+  return {
+    thread: toTutorThread(data.thread),
+    assistantMessage: toChatMessage(data.assistant_message),
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Streaming send — returns a ReadableStream of text chunks
-// ---------------------------------------------------------------------------
-
-/**
- * Initiates a streaming POST to /api/chat/tutor.
- * Returns the raw Response so the caller can consume the body as a stream.
- * Throws if the HTTP status is not 2xx.
- */
 export async function sendMessageStream(
   payload: SendMessagePayload,
 ): Promise<ReadableStream<Uint8Array>> {
-  const res = await fetch('/api/chat/tutor', {
+  const res = await fetch(`/api/v1/workspaces/${payload.workspaceId}/tutor/messages`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      workspaceId: payload.workspaceId,
+      thread_id: payload.threadId || undefined,
       message: payload.message,
       personality: payload.personalityId,
-      conversationHistory: payload.history,
+      custom_instructions: payload.customInstructions,
       stream: true,
     }),
   });
@@ -122,30 +249,15 @@ export async function sendMessageStream(
   if (!res.ok || !res.body) {
     let message = `Stream failed: ${res.status}`;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
+      const body = (await res.json()) as ApiEnvelope<unknown>;
+      if (body.error?.message) {
+        message = body.error.message;
+      }
     } catch {
-      // ignore
+      // use fallback message
     }
     throw new Error(message);
   }
 
   return res.body;
-}
-
-// ---------------------------------------------------------------------------
-// Fetch conversation history (if backend persists it)
-// ---------------------------------------------------------------------------
-
-export interface ConversationHistoryResponse {
-  messages: ChatMessage[];
-}
-
-export async function fetchConversationHistory(
-  workspaceId: string,
-): Promise<ConversationHistoryResponse> {
-  return apiFetch<ConversationHistoryResponse>(
-    `/api/chat/tutor?workspaceId=${encodeURIComponent(workspaceId)}`,
-    { method: 'GET' },
-  );
 }

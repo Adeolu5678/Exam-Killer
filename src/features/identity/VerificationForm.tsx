@@ -14,6 +14,20 @@ import {
   Spinner,
 } from '@/shared/ui';
 
+interface ApiSuccessEnvelope<T> {
+  success: true;
+  data: T;
+}
+
+interface ApiErrorEnvelope {
+  success: false;
+  error?: {
+    message?: string;
+  };
+}
+
+type ApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiErrorEnvelope;
+
 interface VerificationFormProps {
   initialInstitution?: string;
   initialMatric?: string;
@@ -42,20 +56,19 @@ export function VerificationForm({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/identity/check-matric', {
+        const res = await fetch('/api/v1/verification/check-matric', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ institution, matricNumber }),
+          body: JSON.stringify({ institution, matric_number: matricNumber }),
         });
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Identity check failed');
+        const payload = (await res.json()) as ApiEnvelope<{ eligible: boolean }>;
+        if (!res.ok || !payload.success) {
+          throw new Error(payload.success ? 'Identity check failed' : payload.error?.message);
         }
 
         setStep(2);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Identity check failed');
       } finally {
         setLoading(false);
       }
@@ -73,22 +86,23 @@ export function VerificationForm({
     try {
       const formData = new FormData();
       formData.append('institution', institution);
-      formData.append('matricNumber', matricNumber);
+      formData.append('matric_number', matricNumber);
       formData.append('media', file);
 
-      const res = await fetch('/api/identity/verify', {
+      const res = await fetch('/api/v1/verification/submit', {
         method: 'POST',
         body: formData,
       });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit verification');
+      const payload = (await res.json()) as ApiEnvelope<{ submitted: boolean; status: string }>;
+      if (!res.ok || !payload.success) {
+        throw new Error(
+          payload.success ? 'Failed to submit verification' : payload.error?.message,
+        );
       }
 
       onComplete();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit verification');
     } finally {
       setLoading(false);
     }

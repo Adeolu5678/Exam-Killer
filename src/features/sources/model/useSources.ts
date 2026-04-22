@@ -139,7 +139,7 @@ export function useProcessSource(workspaceId: string) {
     mutationFn: (sourceId: string) => processSource(sourceId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sourceKeys.list(workspaceId) });
-      toast.success('Source processing started');
+      toast.success('Source queued for processing');
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to process source');

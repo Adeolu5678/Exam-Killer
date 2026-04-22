@@ -128,6 +128,12 @@ export interface UserSubscription {
   verificationSubmittedAt?: Date;
 }
 
+export interface SubscriptionAccessState {
+  plan: SubscriptionPlan;
+  status: 'active' | 'inactive' | 'past_due';
+  verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+}
+
 export interface UsageStats {
   workspacesCount: number;
   fileUploadsThisMonth: number;
@@ -137,7 +143,7 @@ export interface UsageStats {
 
 export type FeatureKey = keyof PlanFeatures;
 
-const PREMIUM_FEATURES: FeatureKey[] = [
+export const FEATURE_KEYS = [
   'workspaces',
   'fileUploads',
   'aiQueriesPerDay',
@@ -151,21 +157,13 @@ const PREMIUM_FEATURES: FeatureKey[] = [
   'offlineMode',
   'prioritySupport',
   'earlyAccess',
-];
+] as const satisfies readonly FeatureKey[];
 
-export function canAccessFeature(
-  userSubscription: UserSubscription | null,
-  feature: FeatureKey,
-): boolean {
-  if (!userSubscription) {
-    return !PREMIUM_FEATURES.includes(feature);
-  }
+export function isFeatureKey(value: string): value is FeatureKey {
+  return FEATURE_KEYS.includes(value as FeatureKey);
+}
 
-  if (userSubscription.status !== 'active') {
-    return !PREMIUM_FEATURES.includes(feature);
-  }
-
-  const planDetails = getPlanDetails(userSubscription.plan);
+function hasPlanFeatureAccess(planDetails: PlanDetails, feature: FeatureKey): boolean {
   const featureValue = planDetails.features[feature];
   if (typeof featureValue === 'boolean') {
     return featureValue;
@@ -174,6 +172,37 @@ export function canAccessFeature(
     return featureValue > 0;
   }
   return featureValue === 'unlimited';
+}
+
+export function getEffectivePlan(userSubscription: SubscriptionAccessState | null): SubscriptionPlan {
+  return userSubscription && userSubscription.status === 'active' ? userSubscription.plan : 'free';
+}
+
+export function isVerificationBlockingPremiumAccess(
+  userSubscription: SubscriptionAccessState | null,
+): boolean {
+  return (
+    getEffectivePlan(userSubscription) !== 'free' &&
+    userSubscription?.verificationStatus === 'rejected'
+  );
+}
+
+export function canAccessFeature(
+  userSubscription: SubscriptionAccessState | null,
+  feature: FeatureKey,
+): boolean {
+  const effectivePlan = getEffectivePlan(userSubscription);
+  const planDetails = getPlanDetails(effectivePlan);
+
+  if (!hasPlanFeatureAccess(planDetails, feature)) {
+    return false;
+  }
+
+  if (isVerificationBlockingPremiumAccess(userSubscription)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function checkUserLimits(
@@ -223,10 +252,6 @@ export function checkUserLimits(
 
 export function getPlanDetails(plan: SubscriptionPlan): PlanDetails {
   return SUBSCRIPTION_PLANS[plan];
-}
-
-export function getEffectivePlan(userSubscription: UserSubscription | null): SubscriptionPlan {
-  return userSubscription && userSubscription.status === 'active' ? userSubscription.plan : 'free';
 }
 
 export function calculateSubscriptionExpiry(

@@ -26,6 +26,7 @@ const PIPELINE_STEPS: { stage: ProcessingStage; label: string }[] = [
 
 const STAGE_ORDER: Record<ProcessingStage, number> = {
   uploading: 0,
+  queued: 0,
   extracting: 1,
   embedding: 2,
   ready: 3,

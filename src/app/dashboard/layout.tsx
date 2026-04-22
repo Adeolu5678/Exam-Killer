@@ -7,15 +7,13 @@
 // Layer: app (routing only — no business logic)
 // =============================================================================
 
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { AuthContext } from '@/context';
-
-import { isFirebaseConfigured } from '@/shared/lib/firebase/client';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 import { AppShell } from '@/widgets/AppShell';
 
@@ -41,23 +39,18 @@ function createQueryClient() {
 // ---------------------------------------------------------------------------
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
-  const context = useContext(AuthContext);
   const router = useRouter();
-
-  const user = context?.user ?? null;
-  const loading = context?.loading ?? true;
-  const subscription = context?.subscription ?? null;
-  const isLoadingSubscription = context?.isLoadingSubscription ?? false;
+  const { viewer, loading, subscription, isLoadingSubscription, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (!loading && (!isFirebaseConfigured || !user)) {
+    if (!loading && !isAuthenticated) {
       router.replace('/auth/login');
     }
-  }, [loading, user, router]);
+  }, [isAuthenticated, loading, router]);
 
   // Show nothing while auth resolves or subscription is fetching for a new user
   const isInitialLoading = loading;
-  const isSubscriptionLoading = user && isLoadingSubscription && !subscription;
+  const isSubscriptionLoading = isAuthenticated && isLoadingSubscription && !subscription;
 
   if (isInitialLoading || isSubscriptionLoading) {
     return (
@@ -72,11 +65,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   // Final check to ensure we don't render authenticated UI without a user
-  if (!user) return null;
+  if (!isAuthenticated || !viewer) return null;
 
   return (
     <AppShell
-      user={user}
+      viewer={viewer}
       subscription={
         subscription
           ? { plan: subscription.plan, status: subscription.status }

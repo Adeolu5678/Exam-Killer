@@ -1,15 +1,12 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { createUserWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-
 import { useAuth } from '@/shared/hooks/useAuth';
-import { auth, googleProvider, db, isFirebaseConfigured } from '@/shared/lib/firebase/client';
+import { isFirebaseConfigured } from '@/shared/lib/firebase/client';
 
 interface FormData {
   email: string;
@@ -72,10 +69,20 @@ export default function SignupPage() {
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
-  const { signup, loginWithGoogle } = useAuth();
+  const { register, loginWithGoogle, isAuthenticated, loading, error, clearError } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, loading, router]);
 
   if (!isFirebaseConfigured) {
     return <FirebaseNotConfigured />;
+  }
+
+  if (isAuthenticated && !loading) {
+    return null;
   }
 
   const handleChange = (field: keyof FormData, value: string) => {
@@ -115,29 +122,9 @@ export default function SignupPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const createUserDocument = async (uid: string, email: string, displayName: string) => {
-    const userRef = doc(db!, 'users', uid);
-    await setDoc(userRef, {
-      uid,
-      email,
-      full_name: displayName,
-      matric_number: formData.matricNumber || null,
-      department: formData.department || null,
-      level: formData.level ? parseInt(formData.level) : null,
-      subscription_status: 'inactive',
-      subscription_tier: 'free',
-      free_explanations_used: 0,
-      free_ai_queries_used: 0,
-      free_ai_queries_limit: 5,
-      current_streak: 0,
-      total_xp: 0,
-      preferred_tutor_personality: 'mentor',
-      created_at: new Date(),
-    });
-  };
-
   const handleEmailSignup = async (e: FormEvent) => {
     e.preventDefault();
+    clearError();
 
     if (!validateForm()) return;
 
@@ -145,28 +132,19 @@ export default function SignupPage() {
     setErrors({});
 
     try {
-      await signup(formData.email, formData.password);
-
-      const user = auth?.currentUser;
-      if (user) {
-        await updateProfile(user, {
-          displayName: formData.fullName,
-        });
-
-        try {
-          await createUserDocument(user.uid, formData.email, formData.fullName);
-        } catch (dbError) {
-          console.warn(
-            'Could not create user document immediately (Firestore might not be configured):',
-            dbError,
-          );
-        }
-      }
+      await register({
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.fullName,
+        matric_number: formData.matricNumber || null,
+        department: formData.department || null,
+        level: formData.level ? parseInt(formData.level, 10) : null,
+      });
 
       router.push('/dashboard');
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Signup failed';
-      if (errorMessage.includes('email-already-in-use')) {
+    } catch (signupError: unknown) {
+      const errorMessage = signupError instanceof Error ? signupError.message : 'Signup failed';
+      if (errorMessage.includes('email-already-in-use') || errorMessage.includes('already exists')) {
         setErrors({ general: 'An account with this email already exists' });
       } else if (errorMessage.includes('weak-password')) {
         setErrors({ password: 'Password is too weak' });
@@ -181,24 +159,15 @@ export default function SignupPage() {
   };
 
   const handleGoogleSignup = async () => {
+    clearError();
     setIsLoading(true);
     setErrors({});
 
     try {
       await loginWithGoogle();
-
-      const user = auth?.currentUser;
-      if (user) {
-        try {
-          await createUserDocument(user.uid, user.email || '', user.displayName || 'User');
-        } catch (dbError) {
-          console.warn('Could not create user document immediately:', dbError);
-        }
-      }
-
       router.push('/dashboard');
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    } catch (signupError: unknown) {
+      const errorMessage = signupError instanceof Error ? signupError.message : 'Unknown error occurred';
       setErrors({ general: `Failed to sign up with Google: ${errorMessage}` });
     } finally {
       setIsLoading(false);
@@ -212,9 +181,9 @@ export default function SignupPage() {
         <p className="mt-1 text-sm text-indigo-200">Start your exam preparation journey</p>
       </div>
 
-      {errors.general && (
+      {(errors.general ?? error?.message) && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/20 px-4 py-3 text-sm text-red-200">
-          {errors.general}
+          {errors.general ?? error?.message}
         </div>
       )}
 
@@ -229,7 +198,7 @@ export default function SignupPage() {
               type="text"
               value={formData.fullName}
               onChange={(e) => handleChange('fullName', e.target.value)}
-              className={`w-full border bg-white/5 px-4 py-2.5 ${errors.fullName ? 'border-red-500' : 'border-white/20'} rounded-lg text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+              className={`w-full rounded-lg border bg-white/5 px-4 py-2.5 text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.fullName ? 'border-red-500' : 'border-white/20'}`}
               placeholder="John Doe"
               disabled={isLoading}
             />
@@ -245,7 +214,7 @@ export default function SignupPage() {
               type="email"
               value={formData.email}
               onChange={(e) => handleChange('email', e.target.value)}
-              className={`w-full border bg-white/5 px-4 py-2.5 ${errors.email ? 'border-red-500' : 'border-white/20'} rounded-lg text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+              className={`w-full rounded-lg border bg-white/5 px-4 py-2.5 text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.email ? 'border-red-500' : 'border-white/20'}`}
               placeholder="you@example.com"
               disabled={isLoading}
             />
@@ -261,7 +230,7 @@ export default function SignupPage() {
               type="password"
               value={formData.password}
               onChange={(e) => handleChange('password', e.target.value)}
-              className={`w-full border bg-white/5 px-4 py-2.5 ${errors.password ? 'border-red-500' : 'border-white/20'} rounded-lg text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+              className={`w-full rounded-lg border bg-white/5 px-4 py-2.5 text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.password ? 'border-red-500' : 'border-white/20'}`}
               placeholder="Min 8 characters"
               disabled={isLoading}
             />
@@ -269,10 +238,7 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="confirmPassword"
-              className="mb-1 block text-sm font-medium text-indigo-200"
-            >
+            <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-indigo-200">
               Confirm password <span className="text-red-400">*</span>
             </label>
             <input
@@ -280,7 +246,7 @@ export default function SignupPage() {
               type="password"
               value={formData.confirmPassword}
               onChange={(e) => handleChange('confirmPassword', e.target.value)}
-              className={`w-full border bg-white/5 px-4 py-2.5 ${errors.confirmPassword ? 'border-red-500' : 'border-white/20'} rounded-lg text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+              className={`w-full rounded-lg border bg-white/5 px-4 py-2.5 text-sm text-white placeholder-indigo-300 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.confirmPassword ? 'border-red-500' : 'border-white/20'}`}
               placeholder="Confirm password"
               disabled={isLoading}
             />
@@ -290,10 +256,7 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="matricNumber"
-              className="mb-1 block text-sm font-medium text-indigo-200"
-            >
+            <label htmlFor="matricNumber" className="mb-1 block text-sm font-medium text-indigo-200">
               Matric number
             </label>
             <input

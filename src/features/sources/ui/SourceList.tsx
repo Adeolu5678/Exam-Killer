@@ -248,7 +248,7 @@ export function SourceList({ workspaceId, showUploadZone = true }: SourceListPro
           <EmptyStateIllustration />
           <p className={styles.emptyTitle}>No sources yet</p>
           <p className={styles.emptySubtitle}>
-            Upload a PDF, image, or text file to start building your knowledge base.
+            Upload a PDF or text file to start building your knowledge base.
           </p>
         </div>
       </div>

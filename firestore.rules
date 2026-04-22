@@ -121,6 +121,11 @@ service cloud.firestore {
       );
       // AI systems write via admin SDK (server-side), so no client write rules needed
     }
+
+    // Processing jobs are server-managed only.
+    match /source_processing_jobs/{jobId} {
+      allow read, write: if false;
+    }
     // Deprecated NotebookLM collections - locked down
     match /notebooklm_accounts/{accountId} {
       allow read, write: if false;

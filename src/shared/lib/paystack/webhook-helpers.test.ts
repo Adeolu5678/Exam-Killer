@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEventDedupeKey,
   extractPlanFromEvent,
+  extractEventTimestampMs,
   extractUserIdFromMetadata,
   extractWebhookReference,
   mapPlanNameToPlan,
@@ -57,5 +58,21 @@ describe('paystack webhook helpers', () => {
     expect(mapPlanNameToPlan('premium')).toBe('premium_monthly');
     expect(mapPlanNameToPlan('premium-annual')).toBe('premium_annual');
     expect(mapPlanNameToPlan('unknown')).toBeNull();
+  });
+
+  it('derives timestamp from paid_at and supports unix seconds', () => {
+    const withIso = makeEvent({ data: { paid_at: '2026-01-01T00:00:00.000Z' } });
+    expect(extractEventTimestampMs(withIso)).toBe(Date.parse('2026-01-01T00:00:00.000Z'));
+
+    const withUnixSeconds = makeEvent({ data: { timestamp: 1_700_000_000 } });
+    expect(extractEventTimestampMs(withUnixSeconds)).toBe(1_700_000_000_000);
+  });
+
+  it('builds dedupe key from fallback customer code when no reference exists', () => {
+    const event = makeEvent({
+      event: 'subscription.disabled',
+      data: { customer: { customer_code: 'CUS_test_123' } },
+    });
+    expect(buildEventDedupeKey(event)).toBeTruthy();
   });
 });

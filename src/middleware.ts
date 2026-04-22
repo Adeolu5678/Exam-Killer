@@ -2,25 +2,35 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 import { hasValidUnexpiredJwt } from '@/shared/lib/auth/session-cookie';
-
-import { isProtectedRoute, isAuthRoute, LOGIN_ROUTE, DASHBOARD_ROUTE } from './shared/lib/routes';
+import { DASHBOARD_ROUTE, isAuthRoute, isProtectedRoute, LOGIN_ROUTE } from '@/shared/lib/routes';
 
 const SESSION_COOKIE_NAME = 'session';
 
+interface MeEnvelope {
+  success?: boolean;
+  data?: {
+    status?: 'authenticated' | 'anonymous';
+  };
+}
+
 async function verifySessionWithServer(request: NextRequest): Promise<boolean> {
   try {
-    const validateUrl = new URL('/api/auth/session/validate', request.url);
+    const validateUrl = new URL('/api/v1/me', request.url);
     const response = await fetch(validateUrl, {
       method: 'GET',
       headers: {
         cookie: request.headers.get('cookie') ?? '',
+        'x-request-id': request.headers.get('x-request-id') ?? '',
       },
       cache: 'no-store',
     });
 
-    if (!response.ok) return false;
-    const payload = (await response.json()) as { authenticated?: boolean };
-    return payload.authenticated === true;
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = (await response.json()) as MeEnvelope;
+    return payload.success === true && payload.data?.status === 'authenticated';
   } catch {
     return false;
   }

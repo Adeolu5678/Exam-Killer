@@ -59,12 +59,22 @@ export function ChatInterface({
     selectedPersonality,
   } = useTutorStore();
 
-  const { messages, isLoadingHistory, loadHistory, appendMessage, updateMessage, removeMessage } =
-    useConversation(workspaceId);
+  const {
+    messages,
+    activeThreadId,
+    isLoadingHistory,
+    loadHistory,
+    startNewThread,
+    setActiveThreadFromEvent,
+    appendMessage,
+    updateMessage,
+    removeMessage,
+  } = useConversation(workspaceId);
 
   const { sendMessage } = useSendMessage({
     workspaceId,
-    messages,
+    activeThreadId,
+    setActiveThreadFromEvent,
     appendMessage,
     updateMessage,
     removeMessage,
@@ -106,6 +116,10 @@ export function ChatInterface({
     void sendMessage();
   }, [sendMessage]);
 
+  const handleNewThread = useCallback(() => {
+    void startNewThread();
+  }, [startNewThread]);
+
   const handleCitationClick = useCallback((sourceId: string) => {
     useTutorStore.getState().setSourcesPanelOpen(true);
 
@@ -135,6 +149,16 @@ export function ChatInterface({
           <span className={styles.headerLabel}>Tutor Personality</span>
         </div>
         <PersonalitySelector className={styles.personalityRow} />
+        <button
+          className={styles.panelToggle}
+          onClick={handleNewThread}
+          aria-label="Start a new tutor thread"
+          title="New thread"
+          disabled={isStreaming}
+        >
+          <Plus size={14} aria-hidden="true" />
+          <span className={styles.panelToggleLabel}>New Thread</span>
+        </button>
         <button
           className={styles.panelToggle}
           onClick={toggleSourcesPanel}

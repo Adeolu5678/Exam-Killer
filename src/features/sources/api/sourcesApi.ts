@@ -1,17 +1,14 @@
-// =============================================================================
-// features/sources/api/sourcesApi.ts
-// Layer: features → sources → api
-// Purpose: Typed fetch wrappers for workspace sources endpoints.
-//          Wraps GET/POST/DELETE /api/workspaces/[id]/sources and
-//          /api/sources/[sourceId] routes.
-//          Consumers use the model hooks, not this file directly.
-// =============================================================================
+'use client';
 
 import type { SourceItem, UploadProgress } from '../model/types';
 
-// ---------------------------------------------------------------------------
-// Internal fetch helper (mirrors tutorApi / workspaceApi pattern)
-// ---------------------------------------------------------------------------
+interface ApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message?: string;
+  };
+}
 
 interface ApiError {
   message: string;
@@ -19,29 +16,17 @@ interface ApiError {
 }
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
+  const res = await fetch(url, init);
+  const body = (await res.json()) as ApiEnvelope<T>;
 
-  if (!res.ok) {
-    let message = `Request failed: ${res.status}`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // ignore json parse errors
-    }
+  if (!res.ok || !body.success || body.data === undefined) {
+    const message = body.error?.message || `Request failed: ${res.status}`;
     const err: ApiError = { message, status: res.status };
     throw err;
   }
 
-  return res.json() as Promise<T>;
+  return body.data;
 }
-
-// ---------------------------------------------------------------------------
-// Response shapes (scoped to this feature; do NOT import from @/types/api)
-// ---------------------------------------------------------------------------
 
 export interface SourcesListResponse {
   sources: SourceItem[];
@@ -55,27 +40,24 @@ export interface SourcesListResponse {
 
 export interface UploadSourceResponse {
   source: SourceItem;
-  upload_url?: string;
+  job?: {
+    id: string;
+    deduped: boolean;
+    status: 'queued';
+  };
 }
 
 export interface DeleteSourceResponse {
-  success: boolean;
+  deleted: boolean;
 }
 
 export interface ProcessSourceResponse {
-  success: boolean;
-  sourceId: string;
-  chunkCount: number;
-  error?: string;
+  status: 'queued' | 'completed' | 'failed';
+  source_id: string;
+  job_id?: string;
+  deduped?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// API functions
-// ---------------------------------------------------------------------------
-
-/**
- * Fetches a paginated list of sources for a workspace.
- */
 export async function fetchSources(
   workspaceId: string,
   page = 1,
@@ -85,17 +67,26 @@ export async function fetchSources(
     page: String(page),
     limit: String(limit),
   });
-  return apiFetch<SourcesListResponse>(
-    `/api/workspaces/${workspaceId}/sources?${params.toString()}`,
-    { method: 'GET', credentials: 'include' as RequestCredentials },
+
+  const data = await apiFetch<{ sources: SourceItem[]; total: number }>(
+    `/api/v1/workspaces/${workspaceId}/sources?${params.toString()}`,
+    {
+      method: 'GET',
+      credentials: 'include',
+    },
   );
+
+  return {
+    sources: data.sources,
+    pagination: {
+      total: data.total,
+      page,
+      limit,
+      total_pages: Math.max(1, Math.ceil(data.total / limit)),
+    },
+  };
 }
 
-/**
- * Uploads a file to the workspace sources endpoint.
- * Uses XHR so we can track upload progress via onProgress callback.
- * Resolves with the created SourceItem.
- */
 export function uploadSource(
   workspaceId: string,
   file: File,
@@ -103,10 +94,6 @@ export function uploadSource(
 ): Promise<SourceItem> {
   const formData = new FormData();
   formData.append('file', file);
-
-  const fileType =
-    file.type === 'application/pdf' ? 'pdf' : file.type.startsWith('image/') ? 'image' : 'text';
-  formData.append('type', fileType);
 
   const xhr = new XMLHttpRequest();
 
@@ -122,59 +109,51 @@ export function uploadSource(
     });
 
     xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText) as UploadSourceResponse;
-          resolve(data.source);
-        } catch {
-          reject(new Error('Failed to parse upload response'));
-        }
-      } else {
-        let errorMessage = 'Upload failed';
-        try {
-          const error = JSON.parse(xhr.responseText) as { error?: string };
-          errorMessage = error.error ?? 'Upload failed';
-        } catch {
-          // ignore json parse error
-        }
-
-        const friendlyMessage =
-          xhr.status === 413
-            ? 'File is too large (max 50 MB)'
-            : xhr.status === 415
-              ? 'File type not supported'
-              : errorMessage;
-
-        reject(new Error(friendlyMessage));
+      let payload: ApiEnvelope<UploadSourceResponse> | null = null;
+      try {
+        payload = JSON.parse(xhr.responseText) as ApiEnvelope<UploadSourceResponse>;
+      } catch {
+        reject(new Error('Failed to parse upload response'));
+        return;
       }
+
+      if (xhr.status >= 200 && xhr.status < 300 && payload.success && payload.data?.source) {
+        resolve(payload.data.source);
+        return;
+      }
+
+      const friendlyMessage =
+        xhr.status === 413
+          ? 'File is too large (max 50 MB)'
+          : xhr.status === 415
+            ? 'File type not supported'
+            : payload.error?.message || 'Upload failed';
+
+      reject(new Error(friendlyMessage));
     });
 
     xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
     xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
 
-    xhr.open('POST', `/api/workspaces/${workspaceId}/sources`);
+    xhr.open('POST', `/api/v1/workspaces/${workspaceId}/sources`);
     xhr.withCredentials = true;
     xhr.send(formData);
   });
 }
 
-/**
- * Deletes a source by its ID.
- */
 export async function deleteSource(sourceId: string): Promise<void> {
-  const data = await apiFetch<DeleteSourceResponse>(`/api/sources/${sourceId}`, {
+  const data = await apiFetch<DeleteSourceResponse>(`/api/v1/sources/${sourceId}`, {
     method: 'DELETE',
-    credentials: 'include' as RequestCredentials,
+    credentials: 'include',
   });
-  if (!data.success) throw new Error('Failed to delete source');
+  if (!data.deleted) {
+    throw new Error('Failed to delete source');
+  }
 }
 
-/**
- * Triggers (re-)processing of a source document (embedding pipeline).
- */
 export async function processSource(sourceId: string): Promise<ProcessSourceResponse> {
-  return apiFetch<ProcessSourceResponse>(`/api/sources/${sourceId}/process`, {
+  return apiFetch<ProcessSourceResponse>(`/api/v1/sources/${sourceId}/process`, {
     method: 'POST',
-    credentials: 'include' as RequestCredentials,
+    credentials: 'include',
   });
 }

@@ -20,6 +20,7 @@ export {
   useUpdateFlashcard,
   useDeleteFlashcard,
   useReviewFlashcard,
+  useFlashcardReviewHistory,
   flashcardKeys,
 } from './model/useFlashcards';
 
@@ -48,6 +49,7 @@ export {
 export {
   fetchFlashcards,
   fetchFlashcard,
+  fetchFlashcardReviewHistory,
   generateFlashcards,
   createFlashcard,
   updateFlashcard,

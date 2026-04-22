@@ -18,13 +18,18 @@ export { useConversation, useSendMessage } from './model/useTutor';
 export { useTutorStore } from './model/tutorStore';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-export type { ChatMessage, CitationChip, TutorPersonalityId } from './model/types';
+export type { ChatMessage, CitationChip, TutorPersonalityId, TutorThread } from './model/types';
 export { TUTOR_PERSONALITIES, PERSONALITY_THEMES } from './model/types';
 
 // ── API functions ──────────────────────────────────────────────────────────
-export { sendMessage, sendMessageStream, fetchConversationHistory } from './api/tutorApi';
+export {
+  sendMessage,
+  sendMessageStream,
+  fetchTutorThreads,
+  fetchThreadMessages,
+  createTutorThread,
+} from './api/tutorApi';
 export type {
   SendMessagePayload,
   SendMessageResponse,
-  ConversationHistoryResponse,
 } from './api/tutorApi';

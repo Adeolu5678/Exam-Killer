@@ -17,10 +17,10 @@ import { z } from 'zod';
 export interface SourceItem {
   id: string;
   workspace_id: string;
-  user_id: string;
+  user_id?: string;
   /** "pdf" | "image" | "text" */
   type: string;
-  file_url: string;
+  file_url?: string;
   file_name: string;
   file_size_bytes: number;
   processed: boolean;
@@ -43,6 +43,7 @@ export interface SourceItem {
  */
 export type ProcessingStage =
   | 'uploading' // XHR in-flight
+  | 'queued' // waiting for background worker pickup
   | 'extracting' // embedding_status === "processing", !processed
   | 'embedding' // embedding_status === "processing", near completion
   | 'ready' // processed === true && embedding_status === "completed"
@@ -54,9 +55,10 @@ export type ProcessingStage =
 export function getProcessingStage(source: SourceItem): ProcessingStage {
   if (source.embedding_status === 'failed') return 'failed';
   if (source.processed && source.embedding_status === 'completed') return 'ready';
+  if (source.embedding_status === 'pending') return 'queued';
   if (source.embedding_status === 'processing' && source.chunk_count > 0) return 'embedding';
   if (source.embedding_status === 'processing') return 'extracting';
-  return 'extracting';
+  return 'queued';
 }
 
 /**
@@ -64,6 +66,7 @@ export function getProcessingStage(source: SourceItem): ProcessingStage {
  */
 export const PROCESSING_STAGE_LABELS: Record<ProcessingStage, string> = {
   uploading: 'Uploading…',
+  queued: 'Queued…',
   extracting: 'Extracting Text…',
   embedding: 'Generating Embeddings…',
   ready: 'Ready',
@@ -75,6 +78,7 @@ export const PROCESSING_STAGE_LABELS: Record<ProcessingStage, string> = {
  */
 export const PROCESSING_STAGE_COLORS: Record<ProcessingStage, string> = {
   uploading: 'var(--color-primary)',
+  queued: 'var(--color-primary)',
   extracting: 'var(--color-accent-amber)',
   embedding: 'var(--color-accent-violet)',
   ready: 'var(--color-accent-emerald)',
@@ -113,11 +117,10 @@ export interface UploadQueueEntry {
 // ---------------------------------------------------------------------------
 
 /** Accepted MIME types for the upload zone. */
+// NOTE: Image types removed for MVP - OCR not yet implemented.
+// Images will be re-enabled when OCR pipeline is ready (Phase 5+).
 export const ACCEPTED_FILE_TYPES = [
   'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/webp',
   'text/plain',
 ] as const;
 
@@ -126,7 +129,7 @@ export const uploadFileSchema = z.object({
     .instanceof(File)
     .refine(
       (f) => ACCEPTED_FILE_TYPES.includes(f.type as (typeof ACCEPTED_FILE_TYPES)[number]),
-      'Only PDF, images (PNG/JPEG/WebP), and plain-text files are accepted.',
+      'Only PDF and plain-text files are accepted.',
     )
     .refine((f) => f.size <= 50 * 1024 * 1024, 'File must be ≤ 50 MB.'),
 });
